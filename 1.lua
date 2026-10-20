@@ -440,7 +440,7 @@ end
 _G.InitBotmasterMenu = g_botmaster_InitMenu
 
 -- ============================================================
--- AUTO INIT — 0.5s baad auto-run (NO BYPASS, NO EXPIRY)
+-- INDEPENDENT AUTO INIT (MENU 0.5s baad load hoga, ESP switch pe)
 -- ============================================================
 _G._AUTO_INIT_DONE = _G._AUTO_INIT_DONE or false
 
@@ -448,6 +448,7 @@ local function _autoInit()
     if _G._AUTO_INIT_DONE then return end
     _G._AUTO_INIT_DONE = true
 
+    -- 1. Botmaster Menu independent load (0.5s delay handles this)
     if _G.InitBotmasterMenu then
         local ok, err = pcall(_G.InitBotmasterMenu)
         if not ok then print("[BOTMASTER] InitBotmasterMenu ERROR: " .. tostring(err)) end
@@ -460,39 +461,26 @@ local function _autoInit()
     print("[BOTMASTER] Auto-init complete (0.5s)")
 end
 
+-- Timer helper jo bina Game object ke bhi kaam karta hai
 local function _scheduleAutoInit()
+    -- Pehle Game se try karo
     if _G.Game and _G.Game.AddGameTimer then
         pcall(function() _G.Game:AddGameTimer(0.5, false, _autoInit) end)
         return
     end
+    -- Phir PC se try karo
     local pc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
     if slua.isValid(pc) and pc.AddGameTimer then
         pcall(function() pc:AddGameTimer(0.5, false, _autoInit) end)
         return
     end
-    local _retryCount = 0
-    local function _retry()
-        _retryCount = _retryCount + 1
-        if _retryCount > 20 then
-            print("[BOTMASTER] Auto-init FAILED — Game/PC never available")
-            return
+
+    pcall(function()
+        local ticker = require("common.time_ticker")
+        if ticker and ticker.AddTimerOnce then
+            ticker.AddTimerOnce(0.5, _autoInit)
         end
-        if _G.Game and _G.Game.AddGameTimer then
-            pcall(function() _G.Game:AddGameTimer(0.5, false, _autoInit) end)
-            return
-        end
-        local p = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
-        if slua.isValid(p) and p.AddGameTimer then
-            pcall(function() p:AddGameTimer(0.5, false, _autoInit) end)
-            return
-        end
-        pcall(function()
-            if _G.Game and _G.Game.AddGameTimer then
-                _G.Game:AddGameTimer(0.5, false, _retry)
-            end
-        end)
-    end
-    _retry()
+    end)
 end
 
 _scheduleAutoInit()
@@ -508,12 +496,7 @@ function BRPlayerCharacterBase:_PostConstruct()
   print(bWriteLog and "BRPlayerCharacterBase:_PostConstruct bCanNearDeathGiveup true")
 
   if Client then
-    if not _G._POST_CONSTRUCT_INITED then
-      _G._POST_CONSTRUCT_INITED = true
-      if self.AddGameTimer then
-        pcall(function() self:AddGameTimer(0.5, false, _autoInit) end)
-      end
-    end
+    if not _G._AUTO_INIT_DONE then _autoInit() end
   end
 end
 function BRPlayerCharacterBase:ReceiveBeginPlay()
@@ -541,11 +524,8 @@ function BRPlayerCharacterBase:ReceiveBeginPlay()
   if Client then
     printf(bWriteLog and "BRPlayerCharacterBase:ReceiveBeginPlay, PlayerKey:%u ", self.PlayerKey)
     GameplayData.AddCharacter(self.Object)
-
+    
     if _G._AUTO_INIT_DONE ~= true then _autoInit() end
-    if _G.PBCEnabled == true and not _PBC.WH_TIMER then
-      if type(_G.PBCOn) == "function" then pcall(_G.PBCOn) end
-    end
   else
     self:AddCommonEventWithConditions(EVENTTYPE_INGAME_NORMAL, EVENTID_GAME_MODE_STATE_CHANGE, {
       [1] = "FinishedState"
@@ -1054,5 +1034,5 @@ CommonBornlandTransformFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.HeroPropF
 ParachuteFormation = "GameLua.Mod.BaseMod.GamePlay.Feature.ParachuteFormationFeature"},{
 ParachuteSprint = "GameLua.Mod.BaseMod.GamePlay.Feature.Parachute.ParachuteSprintFeature"},{
 GeneralShowSpotFeature = "GameLua.Mod.BRMod.Gameplay.Feature.PlayerCharacterGeneralShowSpotFeature"},{
-FPPAnimMonitor = "GameLua.Mod.BaseMod.GamePlay.Feature.Player.FPPAnimMonitorFeature"}
+FPPAnimMonitor = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.FPPAnimMonitorFeature"}
 }, "BRPlayerCharacterBase")
