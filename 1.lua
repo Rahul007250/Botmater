@@ -59,7 +59,7 @@ _G._BANNER_CREATED = _G._BANNER_CREATED or false
 _G.DsBannerWidget  = _G.DsBannerWidget or nil
 
 function _G.CreateDsDemonBanner()
-    if _G._BYPASS_DONE ~= true then return nil end -- Bypass gate
+    if _G._BYPASS_DONE ~= true then return nil end
     if _G._BANNER_CREATED == true then return _G.DsBannerWidget end
 
     pcall(function()
@@ -396,6 +396,544 @@ end
 function _G.PBCToggle()
     if _G.PBCEnabled then _G.PBCOff() else _G.PBCOn() end
     return _G.PBCEnabled
+end
+
+
+-- ============================================================
+-- STEP 5.5: AIMBOT ENGINE (gated by _G.AimbotEnabled)
+-- ============================================================
+_G.XthrlenConfig = _G.XthrlenConfig or {}
+_G.XthrlenState  = _G.XthrlenState or {}
+_G.XthrlenState.CustomTextData = _G.XthrlenState.CustomTextData or {}
+
+_G.XthrlenConfig.AimTouchEnable        = true
+_G.XthrlenConfig.AimTouchHipfire       = true
+_G.XthrlenConfig.AimTouchScopeAll      = true
+_G.XthrlenConfig.AimTouchHipVisCheck   = true
+_G.XthrlenConfig.AimTouchScopeVisCheck = true
+_G.XthrlenConfig.AimTouchHipIgKnock    = true
+_G.XthrlenConfig.AimTouchScopeIgKnock  = true
+
+_G.XthrlenConfig.AimTouchHipIgBot      = false
+_G.XthrlenConfig.AimTouchScopeIgBot    = false
+_G.XthrlenConfig.AimTouchSG            = false
+_G.XthrlenConfig.AimTouchSGAutoFire    = false
+_G.XthrlenConfig.AimTouchScopeSniper   = false
+_G.XthrlenConfig.AimTouchMortar        = false
+_G.XthrlenConfig.EspFovCircle          = false
+
+_G.XthrlenState.CustomTextData.AimTouchHipPrio    = 1
+_G.XthrlenState.CustomTextData.AimTouchHipBone    = 1
+_G.XthrlenState.CustomTextData.AimTouchHipCond    = 1
+_G.XthrlenState.CustomTextData.AimTouchHipSpeed   = 120
+_G.XthrlenState.CustomTextData.AimTouchHipDist    = 120
+_G.XthrlenState.CustomTextData.AimTouchHipFOV     = 30
+
+_G.XthrlenState.CustomTextData.AimTouchScopePrio   = 1
+_G.XthrlenState.CustomTextData.AimTouchScopeBone   = 1
+_G.XthrlenState.CustomTextData.AimTouchScopeCond   = 1
+_G.XthrlenState.CustomTextData.AimTouchScopeSpeed  = 120
+_G.XthrlenState.CustomTextData.AimTouchScopeDist   = 120
+_G.XthrlenState.CustomTextData.AimTouchScopeFOV    = 30
+_G.XthrlenState.CustomTextData.AimTouchScopePred   = 0
+
+_G.XthrlenState.offPitch = _G.XthrlenState.offPitch or 0
+_G.XthrlenState.offYaw   = _G.XthrlenState.offYaw   or 0
+
+local _AIM = {
+    TIMER       = nil,
+    TIMER_OWNER = nil,
+    VisCache    = {},
+    TickCount   = 0,
+}
+
+local AIM_TICK_INTERVAL   = 0.016
+local AIM_VIS_RESET_EVERY = 300
+
+local function AIM_ClampAngles(angles)
+    if angles.Pitch > 180 then angles.Pitch = angles.Pitch - 360 end
+    if angles.Pitch < -180 then angles.Pitch = angles.Pitch + 360 end
+
+    if angles.Pitch < -75 then
+        angles.Pitch = -75
+    elseif angles.Pitch > 75 then
+        angles.Pitch = 75
+    end
+
+    while angles.Yaw < -180 do angles.Yaw = angles.Yaw + 360 end
+    while angles.Yaw > 180  do angles.Yaw = angles.Yaw - 360 end
+
+    return angles
+end
+
+_G.GetEnemyTargetsFromActors = function(radius)
+    local result = {}
+    local player = GameplayData.GetPlayerCharacter()
+    if not (slua and slua.isValid and slua.isValid(player)) then return result end
+
+    local allCharacters = {}
+    if GameplayData.GetAllPlayerCharacters then
+        allCharacters = GameplayData.GetAllPlayerCharacters()
+    elseif GameplayData.GameCharacters then
+        for _, char in pairs(GameplayData.GameCharacters) do table.insert(allCharacters, char) end
+    end
+
+    local myTeam = player:GetTeamID()
+    for _, actor in pairs(allCharacters) do
+        if slua.isValid(actor) and actor ~= player and actor.GetTeamID and actor:IsAlive() then
+            if actor:GetTeamID() ~= myTeam then
+                local dist = player:GetDistanceTo(actor)
+                if dist <= radius then
+                    table.insert(result, actor)
+                end
+            end
+        end
+    end
+    return result
+end
+
+local function AIM_Tick()
+    if _G.AimbotEnabled ~= true then return end
+    if not _G.XthrlenConfig.AimTouchEnable then return end
+
+    _AIM.TickCount = _AIM.TickCount + 1
+    if _AIM.TickCount % AIM_VIS_RESET_EVERY == 0 then
+        _AIM.VisCache = {}
+    end
+
+    pcall(function()
+        local player = GameplayData.GetPlayerCharacter()
+        if not (slua and slua.isValid and slua.isValid(player)) then return end
+
+        local pc = player:GetPlayerControllerSafety()
+        if not (slua and slua.isValid and slua.isValid(pc)) then return end
+
+        local isFiring = player.bIsWeaponFiring
+        local isADS = player.bIsGunADS
+
+        local weapon = player.WeaponManagerComponent and player.WeaponManagerComponent.CurrentWeaponReplicated
+        if not weapon and type(player.GetCurrentShootWeapon) == "function" then
+            weapon = player:GetCurrentShootWeapon()
+        end
+
+        local isShotgun = false
+        local isSniper = false
+        local isMortar = false
+        local currentAmmo = 1
+
+        if slua.isValid(weapon) then
+            local wID = type(weapon.GetWeaponID) == "function" and weapon:GetWeaponID() or 0
+            local wName = type(weapon.GetWeaponName) == "function" and weapon:GetWeaponName() or ""
+
+            if (wID >= 1030000 and wID < 1040000) or wName:find("S686") or wName:find("S1897") or wName:find("S12") or wName:find("DBS") or wName:find("M1014") then
+                isShotgun = true
+            end
+            if wName:find("Kar98") or wName:find("M24") or wName:find("AWM") or wName:find("Mosin") or wName:find("Win94") or wName:find("AMR") or wName:find("SKS") or wName:find("SLR") or wName:find("Mini") or wName:find("Mk14") or wName:find("QBU") or wName:find("Mk12") or wName:find("VSS") then
+                isSniper = true
+            end
+            if wName:lower():find("mortar") or wName:lower():find("cối") then
+                isMortar = true
+            end
+
+            if type(weapon.GetCurrentAmmo) == "function" then
+                currentAmmo = weapon:GetCurrentAmmo()
+            elseif weapon.ShootWeaponComponent and type(weapon.ShootWeaponComponent.GetCurrentAmmo) == "function" then
+                currentAmmo = weapon.ShootWeaponComponent:GetCurrentAmmo()
+            elseif weapon.CurrentAmmo ~= nil then
+                currentAmmo = weapon.CurrentAmmo
+            end
+        end
+
+        if _G.XthrlenState.IsAutoFiring then
+            pcall(function()
+                player.bIsWeaponFiring = false
+                if type(player.SetIsWeaponFiring) == "function" then player:SetIsWeaponFiring(false) end
+                if slua.isValid(pc) and type(pc.SetIsWeaponFiring) == "function" then pc:SetIsWeaponFiring(false) end
+                local wepMgr = player.WeaponManagerComponent
+                if slua.isValid(wepMgr) then wepMgr.bIsWeaponFiring = false end
+            end)
+            _G.XthrlenState.IsAutoFiring = false
+        end
+
+        if isShotgun and currentAmmo <= 0 then return end
+
+        local cond = 2
+        local prioMode = 1
+        local boneIdx = 1
+        local speedVal = 100
+        local fovVal = 30
+        local maxDistMeters = 100
+        local useVisCheck = false
+        local igKnock = false
+        local igBot = false
+        local predVal = 0
+
+        if isMortar and _G.XthrlenConfig.AimTouchMortar then
+            local isPlaced = false
+            pcall(function()
+                if weapon and weapon.MortarState == 2 then isPlaced = true end
+            end)
+            if not isPlaced then return end
+
+            cond = 2
+            prioMode = 1
+            boneIdx = 4
+            speedVal = 100
+            fovVal = _G.XthrlenState.CustomTextData.AimTouchMortarFOV or 360
+            maxDistMeters = 2000
+            useVisCheck = false
+            igKnock = false
+            igBot = false
+            predVal = _G.XthrlenState.CustomTextData.AimTouchMortarPred or 0
+
+        elseif isShotgun and _G.XthrlenConfig.AimTouchSG then
+            cond = _G.XthrlenState.CustomTextData.AimTouchSGCond or 1
+            if _G.XthrlenConfig.AimTouchSGAutoFire then cond = 2 end
+            if cond == 1 and not isFiring then return end
+            prioMode = _G.XthrlenState.CustomTextData.AimTouchSGPrio or 1
+            boneIdx = _G.XthrlenState.CustomTextData.AimTouchSGBone or 2
+            speedVal = _G.XthrlenState.CustomTextData.AimTouchSGSpeed or 80
+            fovVal = _G.XthrlenState.CustomTextData.AimTouchSGFOV or 40
+            maxDistMeters = _G.XthrlenState.CustomTextData.AimTouchSGDist or 30
+            useVisCheck = _G.XthrlenConfig.AimTouchSGVisCheck
+            igKnock = _G.XthrlenConfig.AimTouchSGIgKnock
+            igBot = _G.XthrlenConfig.AimTouchSGIgBot
+
+        elseif isADS then
+            if isSniper and _G.XthrlenConfig.AimTouchScopeSniper then
+                cond = _G.XthrlenState.CustomTextData.AimTouchSniperCond or 2
+                if cond == 1 and not isFiring then return end
+                prioMode = _G.XthrlenState.CustomTextData.AimTouchSniperPrio or 1
+                boneIdx = _G.XthrlenState.CustomTextData.AimTouchSniperBone or 1
+                speedVal = _G.XthrlenState.CustomTextData.AimTouchSniperSpeed or 30
+                fovVal = _G.XthrlenState.CustomTextData.AimTouchSniperFOV or 20
+                maxDistMeters = _G.XthrlenState.CustomTextData.AimTouchSniperDist or 400
+                useVisCheck = _G.XthrlenConfig.AimTouchSniperVisCheck
+                igKnock = _G.XthrlenConfig.AimTouchSniperIgKnock
+                igBot = _G.XthrlenConfig.AimTouchSniperIgBot
+                predVal = _G.XthrlenState.CustomTextData.AimTouchSniperPred or 0
+            elseif _G.XthrlenConfig.AimTouchScopeAll then
+                cond = _G.XthrlenState.CustomTextData.AimTouchScopeCond or 1
+                if cond == 1 and not isFiring then return end
+                prioMode = _G.XthrlenState.CustomTextData.AimTouchScopePrio or 1
+                boneIdx = 1
+                speedVal = _G.XthrlenState.CustomTextData.AimTouchScopeSpeed or 100
+                fovVal = _G.XthrlenState.CustomTextData.AimTouchScopeFOV or 30
+                maxDistMeters = _G.XthrlenState.CustomTextData.AimTouchScopeDist or 100
+                useVisCheck = _G.XthrlenConfig.AimTouchScopeVisCheck
+                igKnock = _G.XthrlenConfig.AimTouchScopeIgKnock
+                igBot = _G.XthrlenConfig.AimTouchScopeIgBot
+                predVal = _G.XthrlenState.CustomTextData.AimTouchScopePred or 0
+            else
+                return
+            end
+        else
+            if not _G.XthrlenConfig.AimTouchHipfire then return end
+            cond = _G.XthrlenState.CustomTextData.AimTouchHipCond or 1
+            if cond == 1 and not isFiring then return end
+            prioMode = _G.XthrlenState.CustomTextData.AimTouchHipPrio or 1
+            boneIdx = 1
+            speedVal = _G.XthrlenState.CustomTextData.AimTouchHipSpeed or 100
+            fovVal = _G.XthrlenState.CustomTextData.AimTouchHipFOV or 30
+            maxDistMeters = _G.XthrlenState.CustomTextData.AimTouchHipDist or 100
+            useVisCheck = _G.XthrlenConfig.AimTouchHipVisCheck
+            igKnock = _G.XthrlenConfig.AimTouchHipIgKnock
+            igBot = _G.XthrlenConfig.AimTouchHipIgBot
+        end
+
+        local currentMaxDist = maxDistMeters * 100
+        local enemies = _G.GetEnemyTargetsFromActors(currentMaxDist)
+        if not enemies or #enemies == 0 then return end
+
+        local FVector2D = import("Vector2D")
+        local UGameplayStatics = import("GameplayStatics")
+        local KismetMathLibrary = import("KismetMathLibrary")
+
+        local camManager = UGameplayStatics.GetPlayerCameraManager(pc, 0)
+        if not slua.isValid(camManager) then return end
+
+        local camLoc = camManager:GetCameraLocation()
+        if not camLoc then return end
+
+        local ui_util = require("client.common.ui_util")
+        if not ui_util then return end
+
+        local viewportSize = ui_util.GetViewportSize()
+        if not viewportSize then return end
+
+        local centerX = viewportSize.X * 0.5
+        local centerY = viewportSize.Y * 0.5
+        local FOV_RADIUS = (fovVal / 100.0) * (viewportSize.X / 2.0)
+
+        local bestTarget = nil
+        local bestScore = 99999999
+
+        local selBoneName = "head"
+        if boneIdx == 1 then selBoneName = "head"
+        elseif boneIdx == 2 then selBoneName = "spine_03"
+        elseif boneIdx == 3 then selBoneName = "spine_01"
+        elseif boneIdx == 4 then selBoneName = "pelvis" end
+
+        local function tryTarget(target)
+            if not slua.isValid(target) then return end
+
+            pcall(function()
+                if slua.isValid(target.Mesh) then
+                    target.Mesh.MeshComponentUpdateFlag = 0
+                end
+            end)
+
+            if igKnock and target.HealthStatus == 1 then return end
+
+            if igBot then
+                local tIsBot = false
+                if target.bIsAI == true or target.IsAI == true then tIsBot = true end
+                local pState = target.PlayerState
+                if slua.isValid(pState) and (pState.bIsABot or pState.bIsBot) then tIsBot = true end
+                if tIsBot then return end
+            end
+
+            if useVisCheck then
+                local curTime = os.clock()
+                local tId = type(target.GetUniqueID) == "function" and target:GetUniqueID() or tostring(target)
+                if not _AIM.VisCache[tId] or (curTime - _AIM.VisCache[tId].time) > 0.2 then
+                    local isHidden = true
+                    pcall(function() if pc:LineOfSightTo(target) then isHidden = false end end)
+                    _AIM.VisCache[tId] = { hidden = isHidden, time = curTime }
+                end
+                if _AIM.VisCache[tId].hidden then return end
+            end
+
+            local tPos = target:GetBonePos(selBoneName, {X=0, Y=0, Z=0})
+            if not tPos or (tPos.X == 0 and tPos.Y == 0 and tPos.Z == 0) then
+                if type(target.GetSocketLocation) == "function" then
+                    tPos = target:GetSocketLocation(selBoneName)
+                end
+            end
+            if not tPos or (tPos.X == 0 and tPos.Y == 0 and tPos.Z == 0) then
+                if type(target.K2_GetActorLocation) == "function" then
+                    tPos = target:K2_GetActorLocation()
+                    if tPos then
+                        if boneIdx == 1 then tPos.Z = tPos.Z + 70
+                        elseif boneIdx == 2 then tPos.Z = tPos.Z + 40
+                        elseif boneIdx == 3 then tPos.Z = tPos.Z + 20 end
+                    end
+                end
+            end
+            if not tPos or (tPos.X == 0 and tPos.Y == 0 and tPos.Z == 0) then return end
+
+            local screen = FVector2D()
+            local success = pc:ProjectWorldLocationToScreen(tPos, screen, false)
+            if not success or screen.X <= 0 or screen.Y <= 0 then return end
+
+            local dx = screen.X - centerX
+            local dy = screen.Y - centerY
+            local distScreen = math.sqrt(dx*dx + dy*dy)
+
+            if distScreen > FOV_RADIUS then return end
+
+            local currentScore = distScreen
+            if prioMode == 2 then currentScore = player:GetDistanceTo(target)
+            elseif prioMode == 3 then currentScore = target.Health or 100
+            elseif prioMode == 4 then
+                local hp = target.Health or 100
+                local maxhp = target.HealthMax or 100
+                if maxhp <= 0 then maxhp = 100 end
+                currentScore = hp / maxhp
+            end
+
+            if currentScore < bestScore then
+                bestScore = currentScore
+                bestTarget = target
+            end
+        end
+
+        for i, target in ipairs(enemies) do
+            tryTarget(target)
+        end
+
+        if not slua.isValid(bestTarget) then return end
+
+        local finalBonePos = bestTarget:GetBonePos(selBoneName, {X=0, Y=0, Z=0})
+        if not finalBonePos or (finalBonePos.X == 0 and finalBonePos.Y == 0 and finalBonePos.Z == 0) then
+            if type(bestTarget.GetSocketLocation) == "function" then
+                finalBonePos = bestTarget:GetSocketLocation(selBoneName)
+            end
+        end
+        if not finalBonePos or (finalBonePos.X == 0 and finalBonePos.Y == 0 and finalBonePos.Z == 0) then
+            if type(bestTarget.K2_GetActorLocation) == "function" then
+                finalBonePos = bestTarget:K2_GetActorLocation()
+                if finalBonePos then
+                    if boneIdx == 1 then finalBonePos.Z = finalBonePos.Z + 70
+                    elseif boneIdx == 2 then finalBonePos.Z = finalBonePos.Z + 40
+                    elseif boneIdx == 3 then finalBonePos.Z = finalBonePos.Z + 20 end
+                end
+            end
+        end
+        if not finalBonePos or (finalBonePos.X == 0 and finalBonePos.Y == 0 and finalBonePos.Z == 0) then return end
+
+        local tVelocity = nil
+        pcall(function()
+            if type(bestTarget.GetVelocity) == "function" then
+                tVelocity = bestTarget:GetVelocity()
+            end
+        end)
+
+        if not isMortar and predVal > 0 then
+            pcall(function()
+                if tVelocity and (tVelocity.X ~= 0 or tVelocity.Y ~= 0) then
+                    local distToEnemy = player:GetDistanceTo(bestTarget) / 100.0
+                    local ToF = (distToEnemy / 800.0) * (predVal / 50.0)
+                    finalBonePos.X = finalBonePos.X + (tVelocity.X * ToF)
+                    finalBonePos.Y = finalBonePos.Y + (tVelocity.Y * ToF)
+                end
+            end)
+        end
+
+        if isADS and isFiring then
+            local dist = player:GetDistanceTo(bestTarget) / 100.0
+            finalBonePos.Z = finalBonePos.Z - (dist * 1.0)
+        end
+
+        local rot = KismetMathLibrary.FindLookAtRotation(camLoc, finalBonePos)
+        if not rot then return end
+
+        local currentRot = pc:GetControlRotation()
+        if not currentRot then return end
+
+        if not isADS then
+            _G.XthrlenState.offPitch = 0
+            _G.XthrlenState.offYaw   = 0
+        end
+
+        local dPitch = rot.Pitch - currentRot.Pitch
+        local dYaw   = rot.Yaw   - currentRot.Yaw
+
+        if isADS then
+            local camRot = nil
+            if type(camManager.GetCameraRotation) == "function" then
+                camRot = camManager:GetCameraRotation()
+            end
+            if camRot then
+                dYaw   = dYaw   - (camRot.Yaw   - currentRot.Yaw)
+                dPitch = dPitch - (camRot.Pitch - currentRot.Pitch)
+            end
+        end
+
+        while dPitch > 180  do dPitch = dPitch - 360 end
+        while dPitch < -180 do dPitch = dPitch + 360 end
+        while dYaw > 180    do dYaw   = dYaw   - 360 end
+        while dYaw < -180   do dYaw   = dYaw   + 360 end
+
+        if isADS then
+            _G.XthrlenState.offPitch = _G.XthrlenState.offPitch + (dPitch * 0.12)
+            _G.XthrlenState.offYaw   = _G.XthrlenState.offYaw   + (dYaw   * 0.12)
+
+            if _G.XthrlenState.offPitch > 30  then _G.XthrlenState.offPitch = 30  end
+            if _G.XthrlenState.offPitch < -30 then _G.XthrlenState.offPitch = -30 end
+            if _G.XthrlenState.offYaw   > 30  then _G.XthrlenState.offYaw   = 30  end
+            if _G.XthrlenState.offYaw   < -30 then _G.XthrlenState.offYaw   = -30 end
+        end
+
+        local apply = {
+            Pitch = rot.Pitch + _G.XthrlenState.offPitch,
+            Yaw   = rot.Yaw   + _G.XthrlenState.offYaw,
+            Roll  = 0
+        }
+
+        local s = 1.0
+        if speedVal < 100 then
+            s = math.max(1.0, 100.0 / math.max(speedVal, 1))
+        end
+
+        local out = {
+            Pitch = currentRot.Pitch + (apply.Pitch - currentRot.Pitch) / s,
+            Yaw   = currentRot.Yaw   + (apply.Yaw   - currentRot.Yaw)   / s,
+            Roll  = 0
+        }
+
+        out = AIM_ClampAngles(out)
+        pc:SetControlRotation(out, "AimTouch")
+    end)
+end
+
+_G.AimTouch = AIM_Tick
+
+local function AIM_Start()
+    if _G.AimbotEnabled ~= true then return false end
+
+    if _AIM.TIMER and _AIM.TIMER_OWNER then
+        pcall(function()
+            if _AIM.TIMER_OWNER.RemoveGameTimer then
+                _AIM.TIMER_OWNER:RemoveGameTimer(_AIM.TIMER)
+            end
+        end)
+    end
+    _AIM.TIMER       = nil
+    _AIM.TIMER_OWNER = nil
+
+    _AIM.VisCache   = {}
+    _AIM.TickCount  = 0
+    _G.XthrlenState.offPitch = 0
+    _G.XthrlenState.offYaw   = 0
+
+    if _G.Game and _G.Game.AddGameTimer then
+        _AIM.TIMER_OWNER = _G.Game
+        _AIM.TIMER = _G.Game:AddGameTimer(AIM_TICK_INTERVAL, true, AIM_Tick)
+        print("[AIM] Active (Game timer)")
+        return true
+    end
+
+    local pc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
+    if slua.isValid(pc) and pc.AddGameTimer then
+        _AIM.TIMER_OWNER = pc
+        _AIM.TIMER = pc:AddGameTimer(AIM_TICK_INTERVAL, true, AIM_Tick)
+        print("[AIM] Active (PC timer)")
+        return true
+    end
+
+    print("[AIM] Could not start timer")
+    return false
+end
+
+local function AIM_Cleanup()
+    if _AIM.TIMER and _AIM.TIMER_OWNER then
+        pcall(function()
+            if _AIM.TIMER_OWNER.RemoveGameTimer then
+                _AIM.TIMER_OWNER:RemoveGameTimer(_AIM.TIMER)
+            end
+        end)
+    end
+    _AIM.TIMER       = nil
+    _AIM.TIMER_OWNER = nil
+
+    _AIM.VisCache   = {}
+    _AIM.TickCount  = 0
+
+    _G.XthrlenState.offPitch = 0
+    _G.XthrlenState.offYaw   = 0
+
+    print("[AIM] Cleanup done — fully reset")
+end
+
+_G.AimbotEnabled = _G.AimbotEnabled or false
+
+function _G.AimbotOn()
+    if _G.AimbotEnabled == true and _AIM.TIMER then return end
+    _G.AimbotEnabled = true
+    pcall(AIM_Start)
+    print("[AIM] Aimbot ON — fresh install")
+end
+
+function _G.AimbotOff()
+    _G.AimbotEnabled = false
+    pcall(AIM_Cleanup)
+    print("[AIM] Aimbot OFF — fully reset")
+end
+
+function _G.AimbotToggle()
+    if _G.AimbotEnabled then _G.AimbotOff() else _G.AimbotOn() end
+    return _G.AimbotEnabled
 end
 
 --==========×==========×==========×==========×==========×==========×==========--
@@ -737,13 +1275,11 @@ local function _ExecuteBypassNow()
     _G._BYPASS_LOCK_REASON = "ok"
     print("[BYPASS] All bypasses executed successfully")
 
-    -- BYPASS SUCCESS -> Ab Banner create karo
     if type(_G.CreateDsDemonBanner) == "function" then
         local bannerOk, bannerErr = pcall(_G.CreateDsDemonBanner)
         if not bannerOk then print("[BYPASS] CreateDsDemonBanner ERROR: " .. tostring(bannerErr)) end
     end
 
-    -- BYPASS SUCCESS -> Ab Menu load karo
     if type(_G.InitBotmasterMenu) == "function" then
         local menuOk, menuErr = pcall(_G.InitBotmasterMenu)
         if not menuOk then print("[BYPASS] InitBotmasterMenu ERROR: " .. tostring(menuErr)) end
@@ -806,10 +1342,10 @@ function _G.StartBypass()
 end
 
 --==========×==========×==========×==========×==========×==========×==========--
--- BOTMASTER MENU
+-- BOTMASTER MENU (WITH ESP + AIMBOT SWITCHES)
 --==========×==========×==========×==========×==========×==========×==========--
 local function g_botmaster_InitMenu()
-    if _G._BYPASS_DONE ~= true then return end -- Bypass gate
+    if _G._BYPASS_DONE ~= true then return end
     if _G.BotmasterMenuInitialized == "BOTMASTER_MENU_V1" then return end
     _G.BotmasterMenuInitialized = "BOTMASTER_MENU_V1"
 
@@ -826,6 +1362,17 @@ local function g_botmaster_InitMenu()
             SetFunc = function(c, v)
                 local on = (v == true or v == 1)
                 if on then if _G.PBCOn then pcall(_G.PBCOn) end else if _G.PBCOff then pcall(_G.PBCOff) end end
+                return true
+            end
+        },
+        {
+            Key  = "BotmasterAimbot",
+            UI   = AliasMap.Switcher,
+            Text = "Botmaster Aimbot",
+            GetFunc = function() if _G.AimbotEnabled == nil then _G.AimbotEnabled = false end return _G.AimbotEnabled end,
+            SetFunc = function(c, v)
+                local on = (v == true or v == 1)
+                if on then if _G.AimbotOn then pcall(_G.AimbotOn) end else if _G.AimbotOff then pcall(_G.AimbotOff) end end
                 return true
             end
         }
@@ -878,13 +1425,11 @@ local function _autoInit()
     if _G._AUTO_INIT_DONE then return end
     _G._AUTO_INIT_DONE = true
 
-    -- Sirf bypass start karo. Bypass successful hone par hi banner aur menu load honge.
     if type(_G.StartBypass) == "function" then
         pcall(_G.StartBypass)
     end
 end
 
--- Timer helper jo bina Game object ke bhi kaam karta hai
 local function _scheduleAutoInit()
     if _G.Game and _G.Game.AddGameTimer then
         pcall(function() _G.Game:AddGameTimer(0.5, false, _autoInit) end)
@@ -943,7 +1488,6 @@ function BRPlayerCharacterBase:ReceiveBeginPlay()
   end
 end
 
--- (Baki original functions waise hi hain, kuch nahi badla)
 function BRPlayerCharacterBase:CharacterAttrChangeEvent(uPawn, AttrName, AttrVal)
   BRPlayerCharacterBase.__super.CharacterAttrChangeEvent(self, uPawn, AttrName, AttrVal)
   if self.Object ~= uPawn then return end
