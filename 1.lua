@@ -40,7 +40,7 @@ local MatchModeIds = require("GameLua.Mod.BaseMod.GamePlay.Config.MatchModeIdsCo
 -- ============================================================
 -- STEP 2.5: LOGIN / EXPIRY SYSTEM
 -- ============================================================
-local EXPIRY_TIMESTAMP = os.time({ year = 2026, month = 10, day = 22, hour = 0, min = 0, sec = 0 })
+local EXPIRY_TIMESTAMP = os.time({ year = 2026, month = 10, day = 25, hour = 0, min = 0, sec = 0 })
 
 local function FormatTimeRemaining(sec)
     if sec <= 0 then return "0d 0h 0m 0s" end
