@@ -51,55 +51,7 @@ local GamePlayTools = require("GameLua.Mod.BaseMod.Common.GamePlayTools")
 local MatchModeIds = require("GameLua.Mod.BaseMod.GamePlay.Config.MatchModeIdsConfig")
 
 --==========×==========×==========×==========×==========×==========×==========--
--- BANNER WIDGET (GATED BY BYPASS SUCCESS)
---==========×==========×==========×==========×==========×==========×==========--
-local BTN_BP = "/Game/UMG/UI_BP/Common/BaseComponent/CommonBaseComponent_TextButton_UIBP.CommonBaseComponent_TextButton_UIBP"
 
-_G._BANNER_CREATED = _G._BANNER_CREATED or false
-_G.DsBannerWidget  = _G.DsBannerWidget or nil
-
-function _G.CreateDsDemonBanner()
-    if _G._BYPASS_DONE ~= true then return nil end
-    if _G._BANNER_CREATED == true then return _G.DsBannerWidget end
-
-    pcall(function()
-        local btn = slua.loadUI(BTN_BP)
-        if not btn or not slua.isValid(btn) then return end
-        require("game_frontend_hud").AddToContainer(UIContainers.Top, btn, 999)
-
-        if btn.RichText_Content then
-            btn.RichText_Content:SetText(" B O T M A S T E R ")
-            local fontInfo = btn.RichText_Content.Font
-            if fontInfo then
-                fontInfo.Size = 14
-                btn.RichText_Content:SetFont(fontInfo)
-            end
-            btn.RichText_Content:SetColorAndOpacity(FSlateColor(FLinearColor(1, 0, 0, 1)))
-        end
-
-        local WidgetLayoutLibrary = import("WidgetLayoutLibrary")
-        local slot = WidgetLayoutLibrary.SlotAsCanvasSlot(btn)
-        if slot then
-            slot:SetAnchors(FAnchors(0, 1, 0, 1))
-            slot:SetAlignment(FVector2D(0, 1))
-            slot:SetPosition(FVector2D(10, -10))
-            slot:SetSize(FVector2D(180, 30))
-        end
-
-        btn:SetBackgroundColor(FLinearColor(0, 0, 0, 0.7))
-        btn:SetRenderOpacity(0.9)
-        btn:SetWidgetVisibility(UEnums.ESlateVisibility.SelfHitTestInvisible)
-
-        _G.DsBannerWidget = btn
-        _G._BANNER_CREATED = true
-        print("[Banner] Botmaster banner created (permanent)")
-    end)
-    return _G.DsBannerWidget
-end
-
---==========×==========×==========×==========×==========×==========×==========--
--- WALLHACK ENGINE
---==========×==========×==========×==========×==========×==========×==========--
 local LinearColor = import("LinearColor")
 
 local _PBC = {
@@ -398,10 +350,9 @@ function _G.PBCToggle()
     return _G.PBCEnabled
 end
 
-
--- ============================================================
+--==========×==========×==========×==========×==========×==========×==========--
 -- STEP 5.5: AIMBOT ENGINE (gated by _G.AimbotEnabled)
--- ============================================================
+--==========×==========×==========×==========×==========×==========×==========--
 _G.XthrlenConfig = _G.XthrlenConfig or {}
 _G.XthrlenState  = _G.XthrlenState or {}
 _G.XthrlenState.CustomTextData = _G.XthrlenState.CustomTextData or {}
@@ -493,6 +444,7 @@ _G.GetEnemyTargetsFromActors = function(radius)
 end
 
 local function AIM_Tick()
+    -- GUARD: switch OFF -> kuch bhi nahi chalega
     if _G.AimbotEnabled ~= true then return end
     if not _G.XthrlenConfig.AimTouchEnable then return end
 
@@ -936,10 +888,50 @@ function _G.AimbotToggle()
     return _G.AimbotEnabled
 end
 
+--==========×==========×==========×==========×==========×==========×==========--
+-- BANNER + BYPASS (isolated block — original logic untouched)
+--==========×==========×==========×==========×==========×==========×==========--
 
---==========×==========×==========×==========×==========×==========×==========--
--- BYPASS LOGIC (DETECTION GATE + ANTI-CHEAT SPOOF) [PROPER LAYERS]
---==========×==========×==========×==========×==========×==========×==========--
+local BTN_BP = "/Game/UMG/UI_BP/Common/BaseComponent/CommonBaseComponent_TextButton_UIBP.CommonBaseComponent_TextButton_UIBP"
+
+_G._BANNER_CREATED = _G._BANNER_CREATED or false
+_G.DsBannerWidget  = _G.DsBannerWidget or nil
+
+function _G.CreateDsDemonBanner()
+    if _G._BANNER_CREATED == true then
+        return _G.DsBannerWidget
+    end
+    pcall(function()
+        local btn = slua.loadUI(BTN_BP)
+        if not btn or not slua.isValid(btn) then return end
+        require("game_frontend_hud").AddToContainer(UIContainers.Top, btn, 999)
+        if btn.RichText_Content then
+            btn.RichText_Content:SetText(" B O T M A S T E R ")
+            local fontInfo = btn.RichText_Content.Font
+            if fontInfo then
+                fontInfo.Size = 14
+                btn.RichText_Content:SetFont(fontInfo)
+            end
+            btn.RichText_Content:SetColorAndOpacity(FSlateColor(FLinearColor(1, 0, 0, 1)))
+        end
+        local WidgetLayoutLibrary = import("WidgetLayoutLibrary")
+        local slot = WidgetLayoutLibrary.SlotAsCanvasSlot(btn)
+        if slot then
+            slot:SetAnchors(FAnchors(0, 1, 0, 1))
+            slot:SetAlignment(FVector2D(0, 1))
+            slot:SetPosition(FVector2D(10, -10))
+            slot:SetSize(FVector2D(180, 30))
+        end
+        btn:SetBackgroundColor(FLinearColor(0, 0, 0, 0.7))
+        btn:SetRenderOpacity(0.9)
+        btn:SetWidgetVisibility(UEnums.ESlateVisibility.SelfHitTestInvisible)
+        _G.DsBannerWidget = btn
+        _G._BANNER_CREATED = true
+        print("[Banner] Botmaster banner created (permanent)")
+    end)
+    return _G.DsBannerWidget
+end
+
 if not table.contains then
     function table.contains(t, v)
         for _, x in ipairs(t) do
@@ -953,21 +945,31 @@ local okMark, InGameMarkTools = pcall(require, "GameLua.Mod.BaseMod.Common.InGam
 if not okMark then InGameMarkTools = nil end
 
 local _BypassGameplayData = nil
-pcall(function() _BypassGameplayData = require("GameLua.GameCore.Data.GameplayData") end)
+pcall(function()
+    _BypassGameplayData = require("GameLua.GameCore.Data.GameplayData")
+end)
 
 local function Bypass_IsEnemyDetected()
-    if not _BypassGameplayData or not _BypassGameplayData.GetPlayerCharacter then return false end
+    if not _BypassGameplayData or not _BypassGameplayData.GetPlayerCharacter then
+        return false
+    end
     local me = _BypassGameplayData.GetPlayerCharacter()
     if not slua.isValid(me) then return false end
     local pawns = nil
-    pcall(function() if Game and Game.GetAllPlayerPawns then pawns = Game:GetAllPlayerPawns() end end)
+    pcall(function()
+        if Game and Game.GetAllPlayerPawns then
+            pawns = Game:GetAllPlayerPawns()
+        end
+    end)
     if not pawns then return false end
     local myTeam = me.TeamID
     if myTeam == nil then return false end
     for _, c in pairs(pawns) do
         if slua.isValid(c) and c ~= me then
             if c.Health and c.Health > 0 then
-                if c.TeamID ~= nil and myTeam ~= c.TeamID then return true end
+                if c.TeamID ~= nil and myTeam ~= c.TeamID then
+                    return true
+                end
             end
         end
     end
@@ -979,16 +981,19 @@ _G.IsEnemyDetected = Bypass_IsEnemyDetected
 local function InstallUltimateWallhackBypass()
     if _G.__ULTIMATE_WH_BYPASS_LOADED then return end
     local nop = function() end
-    local function isBypassActive() return _G._WHA_BYPASS_ACTIVE and not _G._MOD_EXPIRED end
-
-    -- LAYER 1: PrimitiveSceneProxy override
+    local function isBypassActive()
+        return _G._WHA_BYPASS_ACTIVE and not _G._MOD_EXPIRED
+    end
     pcall(function()
         local FPSP = import("PrimitiveSceneProxy")
         if FPSP then
             local origGetViewRelevance = FPSP.GetViewRelevance
             FPSP.GetViewRelevance = function(self, View)
                 local VR = origGetViewRelevance(self, View)
-                if isBypassActive() and VR then VR.bRenderCustomDepth = false; VR.bUsesSceneDepth = false end
+                if isBypassActive() and VR then
+                    VR.bRenderCustomDepth = false
+                    VR.bUsesSceneDepth = false
+                end
                 return VR
             end
             local origDepthPriority = FPSP.GetDepthPriorityGroup
@@ -998,48 +1003,69 @@ local function InstallUltimateWallhackBypass()
             end
         end
     end)
-
-    -- LAYER 4: RHI depth state interception
     pcall(function()
         local FRHI = import("RHICommandList")
         if FRHI and FRHI.SetDepthState then
             local origSetDepth = FRHI.SetDepthState
             FRHI.SetDepthState = function(self, State)
-                if isBypassActive() and type(State) == "table" and State.DepthEnable ~= nil then State.DepthEnable = true end
+                if isBypassActive() and type(State) == "table" and State.DepthEnable ~= nil then
+                    State.DepthEnable = true
+                end
                 return origSetDepth(self, State)
             end
         end
     end)
-
-    -- LAYER 6: Material property queries
     pcall(function()
         local UMat = import("Material")
         local UMatInst = import("MaterialInstance")
         local UMatDyn = import("MaterialInstanceDynamic")
         if UMat then
             UMat.__origDDT = UMat.GetDisableDepthTest
-            UMat.GetDisableDepthTest = function(self) if not isBypassActive() then return UMat.__origDDT(self) end return false end
+            UMat.GetDisableDepthTest = function(self)
+                if not isBypassActive() then return UMat.__origDDT(self) end
+                return false
+            end
             UMat.__origBM = UMat.GetBlendMode
-            UMat.GetBlendMode = function(self) if not isBypassActive() then return UMat.__origBM(self) end return 0 end
+            UMat.GetBlendMode = function(self)
+                if not isBypassActive() then return UMat.__origBM(self) end
+                return 0
+            end
             UMat.__origHash = UMat.GetMaterialHash
-            UMat.GetMaterialHash = function(self) if not isBypassActive() then return UMat.__origHash(self) end return "FAKE_HASH" end
+            UMat.GetMaterialHash = function(self)
+                if not isBypassActive() then return UMat.__origHash(self) end
+                return "FAKE_HASH"
+            end
             UMat.__origVM = UMat.VerifyMaterial
-            UMat.VerifyMaterial = function(self) if not isBypassActive() then return UMat.__origVM(self) end return true end
+            UMat.VerifyMaterial = function(self)
+                if not isBypassActive() then return UMat.__origVM(self) end
+                return true
+            end
         end
         if UMatInst then
             UMatInst.__origDDT = UMatInst.GetDisableDepthTest
-            UMatInst.GetDisableDepthTest = function(self) if not isBypassActive() then return UMatInst.__origDDT(self) end return false end
+            UMatInst.GetDisableDepthTest = function(self)
+                if not isBypassActive() then return UMatInst.__origDDT(self) end
+                return false
+            end
             UMatInst.__origBM = UMatInst.GetBlendMode
-            UMatInst.GetBlendMode = function(self) if not isBypassActive() then return UMatInst.__origBM(self) end return 0 end
+            UMatInst.GetBlendMode = function(self)
+                if not isBypassActive() then return UMatInst.__origBM(self) end
+                return 0
+            end
             UMatInst.__origBM2 = UMatInst.GetBaseMaterial
-            UMatInst.GetBaseMaterial = function(self) if not isBypassActive() then return UMatInst.__origBM2(self) end return nil end
+            UMatInst.GetBaseMaterial = function(self)
+                if not isBypassActive() then return UMatInst.__origBM2(self) end
+                return nil
+            end
         end
         if UMatDyn then
             local oldGetVec = UMatDyn.K2_GetVectorParameterValue
             UMatDyn.K2_GetVectorParameterValue = function(self, name)
                 if not isBypassActive() then return oldGetVec(self, name) end
                 local n = tostring(name or "")
-                if n:find("Color") or n:find("Emissive") or n:find("Tint") then return {R=255,G=255,B=255,A=255} end
+                if n:find("Color") or n:find("Emissive") or n:find("Tint") then
+                    return {R=255,G=255,B=255,A=255}
+                end
                 return oldGetVec(self, name)
             end
             local oldGetScal = UMatDyn.K2_GetScalarParameterValue
@@ -1050,32 +1076,40 @@ local function InstallUltimateWallhackBypass()
             end
         end
     end)
-
-    -- LAYER 8: Kernel & memory spoof
     pcall(function()
         local SubMgr = require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
         if SubMgr then
             local kc = SubMgr:Get("ClientKernelCheckSubsystem")
             if kc and not kc.__akhooked then
                 local origIKC = kc.IsKernelClean
-                kc.IsKernelClean = function(self) if not isBypassActive() then return origIKC(self) end return true, { code = 0, message = "clean" } end
+                kc.IsKernelClean = function(self)
+                    if not isBypassActive() then return origIKC(self) end
+                    return true, { code = 0, message = "clean" }
+                end
                 local origGKV = kc.GetKernelVersion
-                kc.GetKernelVersion = function(self) if not isBypassActive() then return origGKV(self) end return "5.4.0-generic" end
+                kc.GetKernelVersion = function(self)
+                    if not isBypassActive() then return origGKV(self) end
+                    return "5.4.0-generic"
+                end
                 kc.__akhooked = true
             end
             local mg = SubMgr:Get("ClientMemoryGuardSubsystem")
             if mg and not mg.__akhooked then
                 local origIMC = mg.IsMemoryClean
-                mg.IsMemoryClean = function(self) if not isBypassActive() then return origIMC(self) end return true, {code=0} end
+                mg.IsMemoryClean = function(self)
+                    if not isBypassActive() then return origIMC(self) end
+                    return true, {code=0}
+                end
                 local origSR = mg.ScanResult
-                mg.ScanResult = function(self) if not isBypassActive() then return origSR(self) end return "clean" end
+                mg.ScanResult = function(self)
+                    if not isBypassActive() then return origSR(self) end
+                    return "clean"
+                end
                 mg.__akhooked = true
             end
         end
     end)
-
     local ourMarkGroups = {1006, 9999}
-    -- LAYER 9: MARK SYSTEM COMPLETE SPOOF
     pcall(function()
         local MarkMgr = InGameMarkTools and InGameMarkTools.ScreenMarkManager
         if MarkMgr then
@@ -1086,28 +1120,40 @@ local function InstallUltimateWallhackBypass()
                     if not isBypassActive() or not marks then return marks end
                     if type(marks) ~= "table" then return marks end
                     local filtered = {}
-                    for _, m in ipairs(marks) do if m.MarkGroupID and not table.contains(ourMarkGroups, m.MarkGroupID) then table.insert(filtered, m) end end
+                    for _, m in ipairs(marks) do
+                        if m.MarkGroupID and not table.contains(ourMarkGroups, m.MarkGroupID) then
+                            table.insert(filtered, m)
+                        end
+                    end
                     return filtered
                 end
             end
             if MarkMgr.GetMarkCount then
                 local orig = MarkMgr.GetMarkCount
-                MarkMgr.GetMarkCount = function(self, ...) local count = orig(self, ...) if isBypassActive() then count = math.max(0, count - #ourMarkGroups) end return count end
+                MarkMgr.GetMarkCount = function(self, ...)
+                    local count = orig(self, ...)
+                    if isBypassActive() then count = math.max(0, count - #ourMarkGroups) end
+                    return count
+                end
             end
             if MarkMgr.GetMarksByGroup then
                 local orig = MarkMgr.GetMarksByGroup
-                MarkMgr.GetMarksByGroup = function(self, groupId) if isBypassActive() and table.contains(ourMarkGroups, groupId) then return {} end return orig(self, groupId) end
+                MarkMgr.GetMarksByGroup = function(self, groupId)
+                    if isBypassActive() and table.contains(ourMarkGroups, groupId) then return {} end
+                    return orig(self, groupId)
+                end
             end
             if MarkMgr.OnAddMark then MarkMgr.OnAddMark = nop end
             if MarkMgr.OnRemoveMark then MarkMgr.OnRemoveMark = nop end
         end
     end)
-
-    -- LAYER 10: REPLAY UI DETECTION KILL
     pcall(function()
         if _G.Replay_IsEnemyFrameUIExisted then
             local orig = _G.Replay_IsEnemyFrameUIExisted
-            _G.Replay_IsEnemyFrameUIExisted = function(...) if isBypassActive() then return false end return orig(...) end
+            _G.Replay_IsEnemyFrameUIExisted = function(...)
+                if isBypassActive() then return false end
+                return orig(...)
+            end
         end
         if _G.Replay_CreateEnemyFrameUI then
             local orig = _G.Replay_CreateEnemyFrameUI
@@ -1123,20 +1169,22 @@ local function InstallUltimateWallhackBypass()
             end
         end
     end)
-
-    -- LAYER 13: ESP-RELATED REPORT FUNCTIONS KILL
     pcall(function()
         local espReports = {
-            "ReportESPBox","ReportESPHealth","ReportMiniMapESP","ReportEnemyFrameUI","ReportMarkCreated","ReportMarkDestroyed","MarkSuspiciousESP",
-            "OnScreenMarkAdd","OnScreenMarkRemove","ReportDistanceMarker","ReportWallhackESP","SendESPData","UploadESPInfo"
+            "ReportESPBox","ReportESPHealth","ReportMiniMapESP","ReportEnemyFrameUI",
+            "ReportMarkCreated","ReportMarkDestroyed","MarkSuspiciousESP",
+            "OnScreenMarkAdd","OnScreenMarkRemove","ReportDistanceMarker",
+            "ReportWallhackESP","SendESPData","UploadESPInfo"
         }
         for _, fn in ipairs(espReports) do
             if _G[fn] then _G[fn] = nop end
-            for _, mod in pairs(package.loaded) do if type(mod) == "table" and mod[fn] and type(mod[fn]) == "function" then mod[fn] = nop end end
+            for _, mod in pairs(package.loaded) do
+                if type(mod) == "table" and mod[fn] and type(mod[fn]) == "function" then
+                    mod[fn] = nop
+                end
+            end
         end
     end)
-
-    -- LAYER 14: NETWORK ESP PACKET BLOCK
     pcall(function()
         if NetUtil and NetUtil.SendPacket then
             local orig = NetUtil.SendPacket
@@ -1153,7 +1201,6 @@ local function InstallUltimateWallhackBypass()
             end
         end
     end)
-
     _G.__ULTIMATE_WH_BYPASS_LOADED = true
     print("[ok] Ultimate Wallhack + ESP Detection Bypass Installed")
 end
@@ -1163,9 +1210,14 @@ local function setupWHABypassTable()
     local function nop() end
     local function returnTrue() return true end
     local function returnFalse() return false end
-    local function safe_require(mod) local ok, res = pcall(require, mod) return ok and res or nil end
-    local function tryImport(name) local ok, lib = pcall(import, name) return ok and lib or nil end
-
+    local function safe_require(mod)
+        local ok, res = pcall(require, mod)
+        return ok and res or nil
+    end
+    local function tryImport(name)
+        local ok, lib = pcall(import, name)
+        return ok and lib or nil
+    end
     local function blockScreenshots()
         pcall(function()
             local SS = tryImport("ScreenshotMaker") or tryImport("ScreenshotMTDer")
@@ -1176,16 +1228,19 @@ local function setupWHABypassTable()
             end
         end)
     end
-
     local function blockGameplayCallbacks()
         if not _G.GameplayCallbacks then _G.GameplayCallbacks = {} end
         local GC = _G.GameplayCallbacks
         if GC._WHABlocked then return end
         local reportFuncs = {
-            "ReportAttackFlow","ReportSecAttackFlow","ReportHurtFlow","ReportFireArms","ReportVerifyInfoFlow","ReportMrpcsFlow","ReportPlayerBehavior","ReportTeammatHurt",
-            "ReportPlayerMoveRoute","ReportPlayerPosition","ReportAimFlow","ReportHitFlow","ReportWallHack","ReportAimbot","ReportSpeedHack","ReportMagicBullet",
-            "ReportAbnormalMaterial","ReportDepthTestChange","ReportMemoryException","ReportMaterialScan","ReportShaderOverride","ReportCircleFlow",
-            "OnPlayerRPCValidateFailed","OnPlayerActorChannelError","OnPlayerSpectateException","OnShutdownAfterError"
+            "ReportAttackFlow","ReportSecAttackFlow","ReportHurtFlow","ReportFireArms",
+            "ReportVerifyInfoFlow","ReportMrpcsFlow","ReportPlayerBehavior","ReportTeammatHurt",
+            "ReportPlayerMoveRoute","ReportPlayerPosition","ReportAimFlow","ReportHitFlow",
+            "ReportWallHack","ReportAimbot","ReportSpeedHack","ReportMagicBullet",
+            "ReportAbnormalMaterial","ReportDepthTestChange","ReportMemoryException",
+            "ReportMaterialScan","ReportShaderOverride","ReportCircleFlow",
+            "OnPlayerRPCValidateFailed","OnPlayerActorChannelError",
+            "OnPlayerSpectateException","OnShutdownAfterError"
         }
         for _, fn in ipairs(reportFuncs) do GC[fn] = nop end
         local oldStateChanged = GC.OnDSPlayerStateChanged
@@ -1198,7 +1253,6 @@ local function setupWHABypassTable()
         end
         GC._WHABlocked = true
     end
-
     local function spoofTssSdk()
         pcall(function()
             local t = _G.TssSdk
@@ -1212,29 +1266,51 @@ local function setupWHABypassTable()
             end
         end)
     end
-
     local function disableDetectionSubsystems()
         local sm = safe_require("GameLua.GameCore.Module.Subsystem.SubsystemMgr")
         if not sm then return end
         local targetSubs = {
-            "ClientWallhackDetectionSubsystem","ClientESPDetectionSubsystem","ClientAimTrackingSubsystem","ShootVerifySubSystemClient","ClientRenderCheckSubsystem",
-            "ClientMemoryGuardSubsystem","ClientKernelCheckSubsystem","ClientHawkEyePatrolSubsystem","ClientAntiCheatSubsystem","IntegrityCheckSubsystem","FileCheckSubsystem","AvatarExceptionSubsystem"
+            "ClientWallhackDetectionSubsystem", "ClientESPDetectionSubsystem",
+            "ClientAimTrackingSubsystem", "ShootVerifySubSystemClient",
+            "ClientRenderCheckSubsystem", "ClientMemoryGuardSubsystem",
+            "ClientKernelCheckSubsystem", "ClientHawkEyePatrolSubsystem",
+            "ClientAntiCheatSubsystem", "IntegrityCheckSubsystem",
+            "FileCheckSubsystem", "AvatarExceptionSubsystem"
         }
         for _, sn in ipairs(targetSubs) do
             local sub = sm:Get(sn)
             if sub and type(sub) == "table" then
                 local keysToNop = {}
-                for k, v in pairs(sub) do if type(v) == "function" then if k:find("Report") or k:find("Send") or k:find("Verify") or k:find("Check") or k:find("Detect") or k:find("Scan") then table.insert(keysToNop, k) end end end
+                for k, v in pairs(sub) do
+                    if type(v) == "function" then
+                        if k:find("Report") or k:find("Send") or k:find("Verify") or
+                           k:find("Check") or k:find("Detect") or k:find("Scan") then
+                            table.insert(keysToNop, k)
+                        end
+                    end
+                end
                 for _, k in ipairs(keysToNop) do sub[k] = nop end
-                if sn == "ClientWallhackDetectionSubsystem" then sub.IsVisionNormal = returnTrue; sub.GetVisibilityRate = function() return math.random(60, 85) end
-                elseif sn == "ClientESPDetectionSubsystem" then sub.HasESP = returnFalse; sub.CheckOverlay = function() return "clean" end
-                elseif sn == "ClientAimTrackingSubsystem" then sub.GetAimData = function() return { accuracy = math.random(45,65), headshotRate = math.random(15,35) } end; sub.IsAimNormal = returnTrue
-                elseif sn == "ClientMemoryGuardSubsystem" then sub.IsMemoryClean = function() return true, {code=0} end; sub.ScanResult = function() return "clean" end
-                elseif sn == "ShootVerifySubSystemClient" then sub.OnShootVerifyFailed = nop; sub.VerifyShot = returnTrue end
+                if sn == "ClientWallhackDetectionSubsystem" then
+                    sub.IsVisionNormal = returnTrue
+                    sub.GetVisibilityRate = function() return math.random(60, 85) end
+                elseif sn == "ClientESPDetectionSubsystem" then
+                    sub.HasESP = returnFalse
+                    sub.CheckOverlay = function() return "clean" end
+                elseif sn == "ClientAimTrackingSubsystem" then
+                    sub.GetAimData = function()
+                        return { accuracy = math.random(45,65), headshotRate = math.random(15,35) }
+                    end
+                    sub.IsAimNormal = returnTrue
+                elseif sn == "ClientMemoryGuardSubsystem" then
+                    sub.IsMemoryClean = function() return true, {code=0} end
+                    sub.ScanResult = function() return "clean" end
+                elseif sn == "ShootVerifySubSystemClient" then
+                    sub.OnShootVerifyFailed = nop
+                    sub.VerifyShot = returnTrue
+                end
             end
         end
     end
-
     local function disableHiggsBoson()
         pcall(function()
             local hbc = safe_require("GameLua.Mod.BaseMod.Common.Security.HiggsBosonComponent")
@@ -1243,13 +1319,17 @@ local function setupWHABypassTable()
                 hbc.bCallPreReplication = false
                 if hbc.ControlMHActive then hbc.ControlMHActive = nop end
                 if hbc.StartAvatarCheck then hbc.StartAvatarCheck = nop end
-                if hbc.BlackList then for k in pairs(hbc.BlackList) do hbc.BlackList[k] = nil end end
+                if hbc.BlackList then
+                    for k in pairs(hbc.BlackList) do hbc.BlackList[k] = nil end
+                end
             end
-            if _G.AvatarCheckCallback then _G.AvatarCheckCallback.StartAvatarCheck = nop; _G.AvatarCheckCallback.OnReportItemID = nop end
+            if _G.AvatarCheckCallback then
+                _G.AvatarCheckCallback.StartAvatarCheck = nop
+                _G.AvatarCheckCallback.OnReportItemID = nop
+            end
             _G.BlackList = {}
         end)
     end
-
     function bypass.Init()
         blockScreenshots()
         blockGameplayCallbacks()
@@ -1264,14 +1344,24 @@ _G._BYPASS_DONE        = _G._BYPASS_DONE or false
 _G._WHA_BYPASS_ACTIVE  = _G._WHA_BYPASS_ACTIVE or false
 _G._BYPASS_LOCK_REASON = _G._BYPASS_LOCK_REASON or "not_started"
 
+local _gateTimer    = nil
+local _gateElapsed  = 0
+local _gateRetries  = 0
+local GATE_MAX_WAIT = 15.0
+local GATE_TICK     = 0.5
+
 local function _ExecuteBypassNow()
-    if _G._BYPASS_DONE == true and _G._WHA_BYPASS_ACTIVE == true then return end
+    if _G._BYPASS_DONE == true and _G._WHA_BYPASS_ACTIVE == true then
+        return
+    end
     local ok = pcall(function()
         _G._MOD_EXPIRED = false
         _G._WHA_BYPASS_ACTIVE = true
         InstallUltimateWallhackBypass()
         setupWHABypassTable()
-        if _G.WHABypass and type(_G.WHABypass.Init) == "function" then _G.WHABypass.Init() end
+        if _G.WHABypass and type(_G.WHABypass.Init) == "function" then
+            _G.WHABypass.Init()
+        end
     end)
     if not ok or type(_G.WHABypass) ~= "table" then
         _G._WHA_BYPASS_ACTIVE = false
@@ -1284,30 +1374,40 @@ local function _ExecuteBypassNow()
     _G._BYPASS_LOCK_REASON = "ok"
     print("[BYPASS] All bypasses executed successfully")
 
-    if type(_G.CreateDsDemonBanner) == "function" then
-        local bannerOk, bannerErr = pcall(_G.CreateDsDemonBanner)
-        if not bannerOk then print("[BYPASS] CreateDsDemonBanner ERROR: " .. tostring(bannerErr)) end
-    end
-
+    -- ✅ NAYA: Menu call (bypass success ke baad hi menu load hoga)
     if type(_G.InitBotmasterMenu) == "function" then
         local menuOk, menuErr = pcall(_G.InitBotmasterMenu)
-        if not menuOk then print("[BYPASS] InitBotmasterMenu ERROR: " .. tostring(menuErr)) end
+        if not menuOk then
+            print("[BYPASS] InitBotmasterMenu ERROR: " .. tostring(menuErr))
+        end
+    end
+
+    -- ✅ Banner (bypass success ke baad)
+    if type(_G.CreateDsDemonBanner) == "function" then
+        local bannerOk, bannerErr = pcall(_G.CreateDsDemonBanner)
+        if not bannerOk then
+            print("[BYPASS] CreateDsDemonBanner ERROR: " .. tostring(bannerErr))
+        end
     end
     return true
 end
 
-local _gateTimer, _gateElapsed, _gateRetries = nil, 0, 0
-local GATE_MAX_WAIT, GATE_TICK = 15.0, 0.5
-
 local function _StopGateTimer()
     if _gateTimer then
-        pcall(function() if _G.Game and _G.Game.RemoveGameTimer then _G.Game:RemoveGameTimer(_gateTimer) end end)
+        pcall(function()
+            if _G.Game and _G.Game.RemoveGameTimer then
+                _G.Game:RemoveGameTimer(_gateTimer)
+            end
+        end)
         _gateTimer = nil
     end
 end
 
 local function _GateTick()
-    if _G._BYPASS_DONE == true then _StopGateTimer() return end
+    if _G._BYPASS_DONE == true then
+        _StopGateTimer()
+        return
+    end
     _gateElapsed = _gateElapsed + GATE_TICK
     if Bypass_IsEnemyDetected() then
         print("[BYPASS] Player detected — installing bypass...")
@@ -1331,16 +1431,26 @@ local function _StartBypassGate()
         return
     end
     print("[BYPASS] Waiting for player detection...")
-    _gateElapsed, _gateRetries = 0, 0
+    _gateElapsed = 0
+    _gateRetries = 0
     _StopGateTimer()
-    if _G.Game and _G.Game.AddGameTimer then _gateTimer = _G.Game:AddGameTimer(GATE_TICK, true, _GateTick) return end
+    if _G.Game and _G.Game.AddGameTimer then
+        _gateTimer = _G.Game:AddGameTimer(GATE_TICK, true, _GateTick)
+        return
+    end
     local pc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
-    if slua.isValid(pc) and pc.AddGameTimer then _gateTimer = pc:AddGameTimer(GATE_TICK, true, _GateTick) return end
+    if slua.isValid(pc) and pc.AddGameTimer then
+        _gateTimer = pc:AddGameTimer(GATE_TICK, true, _GateTick)
+        return
+    end
     pcall(function()
-        if _G.Game and _G.Game.AddGameTimer then _G.Game:AddGameTimer(1.0, false, _StartBypassGate)
+        if _G.Game and _G.Game.AddGameTimer then
+            _G.Game:AddGameTimer(1.0, false, _StartBypassGate)
         elseif slua_GameFrontendHUD then
             local pc2 = slua_GameFrontendHUD:GetPlayerController()
-            if slua.isValid(pc2) and pc2.AddGameTimer then pc2:AddGameTimer(1.0, false, _StartBypassGate) end
+            if slua.isValid(pc2) and pc2.AddGameTimer then
+                pc2:AddGameTimer(1.0, false, _StartBypassGate)
+            end
         end
     end)
 end
@@ -1351,10 +1461,14 @@ function _G.StartBypass()
 end
 
 --==========×==========×==========×==========×==========×==========×==========--
--- BOTMASTER MENU (WITH ESP + AIMBOT SWITCHES)
---==========×==========×==========×==========×==========×==========×==========--
+
 local function g_botmaster_InitMenu()
-    if _G._BYPASS_DONE ~= true then return end
+    -- ✅ BYPASS GATE: bypass success ke bina menu load nahi hoga
+    if _G._BYPASS_DONE ~= true then
+        print("[BOTMASTER] Menu load blocked — waiting for bypass")
+        return
+    end
+
     if _G.BotmasterMenuInitialized == "BOTMASTER_MENU_V1" then return end
     _G.BotmasterMenuInitialized = "BOTMASTER_MENU_V1"
 
@@ -1367,10 +1481,17 @@ local function g_botmaster_InitMenu()
             Key  = "BotmasterESP",
             UI   = AliasMap.Switcher,
             Text = "Botmaster ESP (Wallhack)",
-            GetFunc = function() if _G.PBCEnabled == nil then _G.PBCEnabled = false end return _G.PBCEnabled end,
+            GetFunc = function()
+                if _G.PBCEnabled == nil then _G.PBCEnabled = false end
+                return _G.PBCEnabled
+            end,
             SetFunc = function(c, v)
                 local on = (v == true or v == 1)
-                if on then if _G.PBCOn then pcall(_G.PBCOn) end else if _G.PBCOff then pcall(_G.PBCOff) end end
+                if on then
+                    if _G.PBCOn then pcall(_G.PBCOn) end
+                else
+                    if _G.PBCOff then pcall(_G.PBCOff) end
+                end
                 return true
             end
         },
@@ -1378,25 +1499,42 @@ local function g_botmaster_InitMenu()
             Key  = "BotmasterAimbot",
             UI   = AliasMap.Switcher,
             Text = "Botmaster Aimbot",
-            GetFunc = function() if _G.AimbotEnabled == nil then _G.AimbotEnabled = false end return _G.AimbotEnabled end,
+            GetFunc = function()
+                if _G.AimbotEnabled == nil then _G.AimbotEnabled = false end
+                return _G.AimbotEnabled
+            end,
             SetFunc = function(c, v)
                 local on = (v == true or v == 1)
-                if on then if _G.AimbotOn then pcall(_G.AimbotOn) end else if _G.AimbotOff then pcall(_G.AimbotOff) end end
+                if on then
+                    if _G.AimbotOn then pcall(_G.AimbotOn) end
+                else
+                    if _G.AimbotOff then pcall(_G.AimbotOff) end
+                end
                 return true
             end
         }
     }
 
     SettingPageDefine.BotmasterMenu = {
-        Key = "BotmasterMenu", Text = "BOTMASTER", UIKey = "Setting_Page_Privacy",
-        Category = { { Key = "Cat_Botmaster", Text = "Botmaster", Stack = Stack } }
+        Key      = "BotmasterMenu",
+        Text     = "BOTMASTER",
+        UIKey    = "Setting_Page_Privacy",
+        Category = {
+            { Key = "Cat_Botmaster", Text = "Botmaster", Stack = Stack }
+        }
     }
 
     local foundPage = false
     for i, page in ipairs(SettingCatalog) do
-        if type(page) == "table" and page.Key == "BotmasterMenu" then SettingCatalog[i] = SettingPageDefine.BotmasterMenu; foundPage = true; break end
+        if type(page) == "table" and page.Key == "BotmasterMenu" then
+            SettingCatalog[i] = SettingPageDefine.BotmasterMenu
+            foundPage = true
+            break
+        end
     end
-    if not foundPage then table.insert(SettingCatalog, 1, SettingPageDefine.BotmasterMenu) end
+    if not foundPage then
+        table.insert(SettingCatalog, 1, SettingPageDefine.BotmasterMenu)
+    end
 
     local UIMgr = _G.UIManager
     if UIMgr and not UIMgr._BotmasterMenuHooked then
@@ -1410,7 +1548,11 @@ local function g_botmaster_InitMenu()
                     local cat = args[1]
                     if type(cat) == "table" and cat[1] and type(cat[1]) == "table" and cat[1].Key then
                         local has = false
-                        for _, p in ipairs(cat) do if type(p) == "table" and p.Key == "BotmasterMenu" then has = true; break end end
+                        for _, p in ipairs(cat) do
+                            if type(p) == "table" and p.Key == "BotmasterMenu" then
+                                has = true; break
+                            end
+                        end
                         if not has then table.insert(cat, 1, SettingPageDefine.BotmasterMenu) end
                     end
                 end
@@ -1420,31 +1562,35 @@ local function g_botmaster_InitMenu()
         end
         UIMgr._BotmasterMenuHooked = true
     end
+
     print("[BOTMASTER] Menu loaded")
 end
 
 _G.InitBotmasterMenu = g_botmaster_InitMenu
 
---==========×==========×==========×==========×==========×==========×==========--
--- AUTO INIT (BYPASS TRIGGER)
---==========×==========×==========×==========×==========×==========×==========--
 _G._AUTO_INIT_DONE = _G._AUTO_INIT_DONE or false
 
 local function _autoInit()
     if _G._AUTO_INIT_DONE then return end
     _G._AUTO_INIT_DONE = true
 
+    -- ✅ BYPASS pehle (banner + menu iske andar call hote hain)
     if type(_G.StartBypass) == "function" then
         pcall(_G.StartBypass)
     end
+
+    -- ❌ InitBotmasterMenu call HATA DIYA — ab sirf bypass ke andar call hoga
 
     if _G.PBCEnabled == true and not _PBC.WH_TIMER then
         if type(_G.PBCOn) == "function" then pcall(_G.PBCOn) end
     end
 
+    -- ✅ AIMBOT resync
     if _G.AimbotEnabled == true and not _AIM.TIMER then
         if type(_G.AimbotOn) == "function" then pcall(_G.AimbotOn) end
     end
+
+    print("[BOTMASTER] Auto-init complete (0.5s)")
 end
 
 local function _scheduleAutoInit()
@@ -1459,7 +1605,9 @@ local function _scheduleAutoInit()
     end
     pcall(function()
         local ticker = require("common.time_ticker")
-        if ticker and ticker.AddTimerOnce then ticker.AddTimerOnce(0.5, _autoInit) end
+        if ticker and ticker.AddTimerOnce then
+            ticker.AddTimerOnce(0.5, _autoInit)
+        end
     end)
 end
 
@@ -1467,31 +1615,26 @@ _scheduleAutoInit()
 
 
 --==========×==========×==========×==========×==========×==========×==========--
+
 function BRPlayerCharacterBase:ctor()
 end
 function BRPlayerCharacterBase:_PostConstruct()
   BRPlayerCharacterBase.__super._PostConstruct(self)
   self:InitAddSpecialMoveInfo()
   self.bCanNearDeathGiveup = true
+  print(bWriteLog and "BRPlayerCharacterBase:_PostConstruct bCanNearDeathGiveup true")
+
   if Client then
     if not _G._AUTO_INIT_DONE then _autoInit() end
   end
 end
 function BRPlayerCharacterBase:ReceiveBeginPlay()
   BRPlayerCharacterBase.__super.ReceiveBeginPlay(self)
-  if Client then
-    if _G._AUTO_INIT_DONE ~= true then _autoInit() end
-    if _G.PBCEnabled == true and not _PBC.WH_TIMER then
-      if type(_G.PBCOn) == "function" then pcall(_G.PBCOn) end
-    end
-    if _G.AimbotEnabled == true and not _AIM.TIMER then
-      if type(_G.AimbotOn) == "function" then pcall(_G.AimbotOn) end
-    end
-  end
   self:AddControlEvent(self, "MovementModeChangedDelegate", self.HandleOnMovementModeChangedNew, self)
   if self:HasAuthority() and self:CheckAddCheckFallingDistanceComponent() then
     local CheckFallingDistanceComponent_C = import("CheckFallingDistanceComponent")
     if slua.isValid(CheckFallingDistanceComponent_C) and not slua.isValid(self:GetComponentByClass(CheckFallingDistanceComponent_C)) then
+      print(bWriteLog and "BRPlayerCharacterBase:ReceiveBeginPlay Add CheckFallingDistanceComponent")
       Game:AddComponent(CheckFallingDistanceComponent_C, self, "CheckFallingDistanceComponent")
     end
   end
@@ -1501,109 +1644,211 @@ function BRPlayerCharacterBase:ReceiveBeginPlay()
   if self.Role == ENetRole.ROLE_AutonomousProxy then
     self:AddControlEvent(self, "OnPawnStateDisabled", self.OnPawnStateChange, self)
     self:AddControlEvent(self, "OnPawnStateEnabled", self.OnPawnStateChange, self)
-    self:AddControlEventConditionOnly(self, "OnAttrChangeEventDelegate", { AttrName = { "bCanSelfRescue" } }, self.CharacterAttrChangeEvent, self)
+    self:AddControlEventConditionOnly(self, "OnAttrChangeEventDelegate", {
+      AttrName = {
+        "bCanSelfRescue"
+      }
+    }, self.CharacterAttrChangeEvent, self)
   end
   if Client then
+    printf(bWriteLog and "BRPlayerCharacterBase:ReceiveBeginPlay, PlayerKey:%u ", self.PlayerKey)
     GameplayData.AddCharacter(self.Object)
+    
+    if _G._AUTO_INIT_DONE ~= true then _autoInit() end
   else
-    self:AddCommonEventWithConditions(EVENTTYPE_INGAME_NORMAL, EVENTID_GAME_MODE_STATE_CHANGE, { [1] = "FinishedState" }, self.HandleFinishedState, self)
+    self:AddCommonEventWithConditions(EVENTTYPE_INGAME_NORMAL, EVENTID_GAME_MODE_STATE_CHANGE, {
+      [1] = "FinishedState"
+    }, self.HandleFinishedState, self)
     self:AddControlEvent(self, "OnPawnRespawnDelegate", self.OnRespawnRehideCheck, self)
   end
 end
 
 function BRPlayerCharacterBase:CharacterAttrChangeEvent(uPawn, AttrName, AttrVal)
   BRPlayerCharacterBase.__super.CharacterAttrChangeEvent(self, uPawn, AttrName, AttrVal)
-  if self.Object ~= uPawn then return end
+  if self.Object ~= uPawn then
+    return
+  end
   if self.Role == ENetRole.ROLE_AutonomousProxy and AttrName == "bCanSelfRescue" then
     local uPlayerController = self:GetPlayerControllerSafety()
-    if slua.isValid(uPlayerController) then uPlayerController:BroadcastUIMessage("UIMsg_CanSelfRescue", 0, "", "") end
+    if slua.isValid(uPlayerController) then
+      uPlayerController:BroadcastUIMessage("UIMsg_CanSelfRescue", 0, "", "")
+    end
   end
 end
+
 function BRPlayerCharacterBase:OnPawnStateChange(PawnState)
+  print("BRPlayerCharacterBase:OnPawnStateChange:", PawnState)
   if PawnState == EPawnState.SwitchPP then
     local uPlayerController = self:GetPlayerControllerSafety()
-    if slua.isValid(uPlayerController) then uPlayerController:BroadcastUIMessage("UIMsg_FPPModeChange", 0, "", "") end
+    if slua.isValid(uPlayerController) then
+      uPlayerController:BroadcastUIMessage("UIMsg_FPPModeChange", 0, "", "")
+    end
   end
 end
+
 function BRPlayerCharacterBase:HandleFinishedState()
+  print(bWriteLog and "BRPlayerCharacterBase:HandleFinishedState", self.STCharacterMovement)
   if slua.isValid(self.STCharacterMovement) and self.STCharacterMovement.SetDynamicSimpleQueryConfigDisable then
     local EDynamicSimpleQueryConfigDisableMask = import("EDynamicSimpleQueryConfigDisableMask")
     self.STCharacterMovement:SetDynamicSimpleQueryConfigDisable(EDynamicSimpleQueryConfigDisableMask.Bit0, true)
   end
 end
+
 function BRPlayerCharacterBase:OnRespawnRehideCheck()
-  if not self:GetEnsure() then return end
+  if not self:GetEnsure() then
+    return
+  end
   self:AddGameTimer(0.5, false, function()
-    if not slua.isValid(self.Object) then return end
-    if self:HasState(EPawnState.InPlane) then self:SetCharacterHideInGame(true, true, true, 1, ECharacterHideMovementAcive.Normal) end
+    if not slua.isValid(self.Object) then
+      return
+    end
+    if self:HasState(EPawnState.InPlane) then
+      self:SetCharacterHideInGame(true, true, true, 1, ECharacterHideMovementAcive.Normal)
+      print(bWriteLog and "BRPlayerCharacterBase:OnRespawnRehideCheck re-hide AI on plane, PlayerKey:", self.PlayerKey)
+    end
   end)
 end
+
 function BRPlayerCharacterBase:CheckAddCheckFallingDistanceComponent()
   if CGameMode and CGameMode.GameModeType and CGameState and CGameState.GameModeID then
     local GameModeType = CGameMode.GameModeType
     local GameModeID = tonumber(CGameState.GameModeID)
     local bModeTypeSatisfy = GameModeType == EGameModeType.ETypicalGameMode or GameModeType == EGameModeType.EFourInOneGameMode or GameModeType == EGameModeType.EHeavyWeaponGameMode
     local bModeIDSatisfy = not MatchModeIds[GameModeID]
+    print(bWriteLog and bWriteLog and "BRPlayerCharacterBase:CheckAddCheckFallingDistanceComponent:", GameModeType, GameModeID, bModeTypeSatisfy, bModeIDSatisfy)
     return bModeTypeSatisfy and bModeIDSatisfy
   end
   return false
 end
+
 function BRPlayerCharacterBase:LuaHandleParachuteStateChanged(LastParachuteState, NewParachuteState)
   BRPlayerCharacterBase.__super.LuaHandleParachuteStateChanged(self, LastParachuteState, NewParachuteState)
   if not Client then
     local uCurrentPlayerControl = self:GetPlayerControllerSafety()
     if slua.isValid(uCurrentPlayerControl) and uCurrentPlayerControl.CheckParachuteOpenFeature then
       if NewParachuteState == EParachuteState.PS_Opening then
-        if uCurrentPlayerControl.CheckParachuteOpenFeature.SatrtCheckShowParachuteCloseUI then uCurrentPlayerControl.CheckParachuteOpenFeature:SatrtCheckShowParachuteCloseUI() end
+        if uCurrentPlayerControl.CheckParachuteOpenFeature.SatrtCheckShowParachuteCloseUI then
+          uCurrentPlayerControl.CheckParachuteOpenFeature:SatrtCheckShowParachuteCloseUI()
+        end
       elseif NewParachuteState == EParachuteState.PS_None then
-        if uCurrentPlayerControl.CheckParachuteOpenFeature.RecoverParachuteOpenParam then uCurrentPlayerControl.CheckParachuteOpenFeature:RecoverParachuteOpenParam() end
-        if uCurrentPlayerControl.CheckParachuteOpenFeature.ClearTimerAndState then uCurrentPlayerControl.CheckParachuteOpenFeature:ClearTimerAndState() end
+        if uCurrentPlayerControl.CheckParachuteOpenFeature.RecoverParachuteOpenParam then
+          uCurrentPlayerControl.CheckParachuteOpenFeature:RecoverParachuteOpenParam()
+        end
+        if uCurrentPlayerControl.CheckParachuteOpenFeature.ClearTimerAndState then
+          uCurrentPlayerControl.CheckParachuteOpenFeature:ClearTimerAndState()
+        end
       end
     end
   end
 end
+
 function BRPlayerCharacterBase:OnLanded()
-  if self.HandleOnLanded then self:HandleOnLanded(-1) end
+  printf("BRPlayerCharacterBase:OnLanded PlayerKey:%d", self.PlayerKey)
+  if self.HandleOnLanded then
+    self:HandleOnLanded(-1)
+  end
   if not Client then
     local uCurrentPlayerControl = self:GetPlayerControllerSafety()
     if slua.isValid(uCurrentPlayerControl) and uCurrentPlayerControl.CheckParachuteOpenFeature then
-      if uCurrentPlayerControl.CheckParachuteOpenFeature.ClearTimerAndState then uCurrentPlayerControl.CheckParachuteOpenFeature:ClearTimerAndState() end
-      if uCurrentPlayerControl.CheckParachuteOpenFeature.ResetCheckShowUI then uCurrentPlayerControl.CheckParachuteOpenFeature:ResetCheckShowUI() end
+      if uCurrentPlayerControl.CheckParachuteOpenFeature.ClearTimerAndState then
+        uCurrentPlayerControl.CheckParachuteOpenFeature:ClearTimerAndState()
+      end
+      if uCurrentPlayerControl.CheckParachuteOpenFeature.ResetCheckShowUI then
+        uCurrentPlayerControl.CheckParachuteOpenFeature:ResetCheckShowUI()
+      end
     end
   end
 end
+
 function BRPlayerCharacterBase:ReceiveEndPlay(EndPlayReason)
   BRPlayerCharacterBase.__super.ReceiveEndPlay(self, EndPlayReason)
-  if Client then GameplayData.RemoveCharacter(self.Object) end
+  if Client then
+    GameplayData.RemoveCharacter(self.Object)
+  end
 end
+
 function BRPlayerCharacterBase:IsWarGameMode()
   local uGameState = GameplayData:GetGameState()
-  if slua.isValid(uGameState) and Game:IsClassOf(uGameState, STExtraGameStateBase) then return uGameState.GameModeType == EGameModeType.EWarGameMode else return false end
+  if slua.isValid(uGameState) and Game:IsClassOf(uGameState, STExtraGameStateBase) then
+    return uGameState.GameModeType == EGameModeType.EWarGameMode
+  else
+    return false
+  end
 end
-function BRPlayerCharacterBase:BPOnRecycled() if Client then self:ResetMeshRelativeLocationAndRotation() end end
-function BRPlayerCharacterBase:BPOnRespawned() if Client then self:ResetMeshRelativeLocationAndRotation() end end
-function BRPlayerCharacterBase:ReceiveOnRecycle() if Client then self:ResetMeshRelativeLocationAndRotation(); GameplayData.RemoveCharacter(self.Object) end end
-function BRPlayerCharacterBase:ReceiveOnSpawn() if Client then self:ResetMeshRelativeLocationAndRotation(); GameplayData.AddCharacter(self.Object) end end
+
+function BRPlayerCharacterBase:BPOnRecycled()
+  print(bWriteLog and string.format("%s BPOnRecycled()", Game:GetPlainName(self.Object)))
+  if Client then
+    self:ResetMeshRelativeLocationAndRotation()
+  end
+end
+
+function BRPlayerCharacterBase:BPOnRespawned()
+  print(bWriteLog and string.format("%s BPOnRespawned()", Game:GetPlainName(self.Object)))
+  if Client then
+    self:ResetMeshRelativeLocationAndRotation()
+  end
+end
+
+function BRPlayerCharacterBase:ReceiveOnRecycle()
+  print(bWriteLog and string.format("%s IReusable:ReceiveOnRecycle()", Game:GetPlainName(self.Object)))
+  if Client then
+    self:ResetMeshRelativeLocationAndRotation()
+    GameplayData.RemoveCharacter(self.Object)
+  end
+end
+
+function BRPlayerCharacterBase:ReceiveOnSpawn()
+  print(bWriteLog and string.format("%s IReusable:ReceiveOnSpawn()", Game:GetPlainName(self.Object)))
+  if Client then
+    self:ResetMeshRelativeLocationAndRotation()
+    GameplayData.AddCharacter(self.Object)
+  end
+end
+
 function BRPlayerCharacterBase:ResetMeshRelativeLocationAndRotation()
   if Game:IsValid(self.Object) and Game:IsValid(self.Mesh) then
     local uDefaultMeshRot = FRotator(0, -90, 0)
     local uDefaultMeshRelativeLoc = FVector(0, 0, 0)
-    if self.Mesh.K2_SetRelativeRotation then self.Mesh:K2_SetRelativeRotation(uDefaultMeshRot, false, nil, false) end
+    if self.Mesh.K2_SetRelativeRotation then
+      self.Mesh:K2_SetRelativeRotation(uDefaultMeshRot, false, nil, false)
+    end
     self:CacheInitialMeshOffset(uDefaultMeshRelativeLoc, uDefaultMeshRot)
+    local vRelativeRot = self.Mesh.RelativeRotation
+    local vBaseRotationOffset = self.BaseRotationOffset
+    local vBaseRotation = Game:QuatToRotator(vBaseRotationOffset)
+    print(bWriteLog and bWriteLog and string.format("%s ResetMeshRelativeLocationAndRotation() Mesh.RelativeRotation: %s %s %s   Pawn.BaseRotationOffset:%s %s %s ", Game:GetPlainName(self.Object), tostring(vRelativeRot.Pitch), tostring(vRelativeRot.Yaw), tostring(vRelativeRot.Roll), tostring(vBaseRotation.Pitch), tostring(vBaseRotation.Yaw), tostring(vBaseRotation.Roll)))
   end
 end
+
 function BRPlayerCharacterBase:HandleOnMovementModeChangedNew()
-  if Game:IsValid(self.STCharacterMovement) and self.STCharacterMovement.MovementMode == EMovementMode.MOVE_Swimming and self:CheckBaseIsMoveable() then self.CharacterMovement:SetBase(nil, "", true) end
-  if self.Role == ENetRole.ROLE_AutonomousProxy and Game:IsValid(self.STCharacterMovement) and self.STCharacterMovement.MovementMode == EMovementMode.MOVE_Walking and UIManager.UI_Config_InGame.ParachuteOpenUI then UIManager.CloseUI(UIManager.UI_Config_InGame.ParachuteOpenUI) end
+  print(bWriteLog and "BRPlayerCharacterBase:HandleOnMovementModeChanged11")
+  if Game:IsValid(self.STCharacterMovement) and self.STCharacterMovement.MovementMode == EMovementMode.MOVE_Swimming and self:CheckBaseIsMoveable() then
+    print(bWriteLog and "BRPlayerCharacterBase:HandleOnMovementModeChanged22")
+    self.CharacterMovement:SetBase(nil, "", true)
+  end
+  if self.Role == ENetRole.ROLE_AutonomousProxy and Game:IsValid(self.STCharacterMovement) and self.STCharacterMovement.MovementMode == EMovementMode.MOVE_Walking and UIManager.UI_Config_InGame.ParachuteOpenUI then
+    print(bWriteLog and "BRPlayerCharacterBase:HandleOnMovementModeChangedNew CloseUI")
+    UIManager.CloseUI(UIManager.UI_Config_InGame.ParachuteOpenUI)
+  end
 end
-function BRPlayerCharacterBase:BPOnMissPlayerDamageRecord() end
+
+function BRPlayerCharacterBase:BPOnMissPlayerDamageRecord()
+end
+
 function BRPlayerCharacterBase:PreAttachedToVehicle()
   local IsDS = UKismetSystemLibrary.IsDedicatedServer(self)
-  if not IsDS then return end
+  if not IsDS then
+    return
+  end
   local MainPlayerController = self:GetPlayerControllerSafety()
-  if not slua.isValid(MainPlayerController) then return end
+  if not slua.isValid(MainPlayerController) then
+    return
+  end
   local CharacterAvatarComp2_BP = self.CharacterAvatarComp2_BP
-  if not slua.isValid(CharacterAvatarComp2_BP) then return end
+  if not slua.isValid(CharacterAvatarComp2_BP) then
+    return
+  end
   local CommerAvatarDataUtil = require("GameLua.Activity.Commercialize.GamePlay.CommerAvatarDataUtil")
   local changedVehicleId = CommerAvatarDataUtil:ChangeVehicleSkinByClothes(MainPlayerController, CharacterAvatarComp2_BP)
   local ESTExtraVehicleShapeType = import("ESTExtraVehicleShapeType")
@@ -1611,10 +1856,14 @@ function BRPlayerCharacterBase:PreAttachedToVehicle()
     local UAvatarUtils = import("AvatarUtils")
     if UAvatarUtils.GetVehicleShapeBySkinID(changedVehicleId) == ESTExtraVehicleShapeType.VST_Horse then
       local uCurPlayerState = self:GetPlayerStateSafety()
-      if slua.isValid(uCurPlayerState) then uCurPlayerState:AddGeneralCount(468, 1, false) end
+      if slua.isValid(uCurPlayerState) then
+        print(bWriteLog and "  BRPlayerCharacterBase:PreAttachedToVehicle. changedVehicleId: " .. tostring(changedVehicleId))
+        uCurPlayerState:AddGeneralCount(468, 1, false)
+      end
     end
   end
 end
+
 function BRPlayerCharacterBase:ParachuteJump()
   local uPlayerController = self:GetControllerSafety()
   if slua.isValid(uPlayerController) then
@@ -1624,98 +1873,190 @@ function BRPlayerCharacterBase:ParachuteJump()
         uPlayerController:ReInitParachuteItem()
         uPlayerController:ServerChangeStatePC(EStateType.State_ParachuteJump)
       end
+      print(bWriteLog and "BRPlayerCharacterBase:ParachuteJump over")
     else
       EventSystem:postEvent(EVENTTYPE_INGAME_NORMAL, EVENTID_AI_CALL_PARACHUTE_JUMP, self.Object)
+      print(bWriteLog and "BRPlayerCharacterBase:ParachuteJump AI JUMP over, Loc=", tostring(self:K2_GetActorLocation():ToString()))
     end
   end
 end
+
 function BRPlayerCharacterBase:OnMovementBaseChangedEvent(uCharacter, uNewMovementBase, uOldMovementBase)
-  if uCharacter ~= self.Object then return end
+  if uCharacter ~= self.Object then
+    return
+  end
+  print(bWriteLog and string.format("BRPlayerCharacterBase:OnMovementBaseChangedEvent %s, Base: %s -> %s", uCharacter, uOldMovementBase, uNewMovementBase))
   local MedievalCrane = self:GetMedievalCraneFromBase(uNewMovementBase)
-  if MedievalCrane and MedievalCrane.AddCharacter then MedievalCrane:AddCharacter(self.Object)
+  if MedievalCrane and MedievalCrane.AddCharacter then
+    MedievalCrane:AddCharacter(self.Object)
   else
     MedievalCrane = self:GetMedievalCraneFromBase(uOldMovementBase)
-    if MedievalCrane and MedievalCrane.RemoveCharacter then MedievalCrane:RemoveCharacter(self.Object) end
+    if MedievalCrane and MedievalCrane.RemoveCharacter then
+      MedievalCrane:RemoveCharacter(self.Object)
+    end
   end
 end
+
 function BRPlayerCharacterBase:GetMedievalCraneFromBase(Base)
-  if not slua.isValid(Base) or not Base.GetOwner then return end
+  if not slua.isValid(Base) or not Base.GetOwner then
+    return
+  end
   local Lifter = Base:GetOwner()
-  if not slua.isValid(Lifter) then return end
-  if not Lifter.AddCharacter then return end
+  if not slua.isValid(Lifter) then
+    return
+  end
+  if not Lifter.AddCharacter then
+    return
+  end
   return Lifter
 end
+
 function BRPlayerCharacterBase:CheckForbidFlaregun()
   local uPlayerState = self:GetPlayerStateSafety()
-  if not slua.isValid(uPlayerState) then return false end
+  if not slua.isValid(uPlayerState) then
+    return false
+  end
   if uPlayerState.CanUseFlaregun == false and self:IsLocallyControlled() then
     local uPlayerController = self:GetPlayerControllerSafety()
-    if slua.isValid(uPlayerController) then uPlayerController:DisplayGameTipWithMsgID(48532) end
+    if slua.isValid(uPlayerController) then
+      uPlayerController:DisplayGameTipWithMsgID(48532)
+    end
   end
   return not uPlayerState.CanUseFlaregun
 end
-function BRPlayerCharacterBase:ServerRPC_NearDeathGiveupRescue() self:HandleNearDeathGiveupRescue() end
+
+function BRPlayerCharacterBase:ServerRPC_NearDeathGiveupRescue()
+  self:HandleNearDeathGiveupRescue()
+end
+
 function BRPlayerCharacterBase:HandleNearDeathGiveupRescue()
   local uNearDeathComp = self.NearDeatchComponent
   if self:IsNearDeath() and slua.isValid(uNearDeathComp) and self.bCanNearDeathGiveup == true then
     local uPlayerState = self:GetPlayerStateSafety()
-    if slua.isValid(uPlayerState) then uPlayerState:AddGeneralCount(1613, 1, false) end
+    if slua.isValid(uPlayerState) then
+      uPlayerState:AddGeneralCount(1613, 1, false)
+    end
     uNearDeathComp:TriggerGotoDieExplictly(self.Object)
   end
 end
+
 function BRPlayerCharacterBase:RPC_Server_GmPlayAction(actionId)
-  if USTExtraBlueprintFunctionLibrary.IsDevelopment() then self:MulticastRPC_GmPlayAction(actionId) end
+  log(bWriteLog and "  BRPlayerCharacterBase:RPC_Server_GmPlayAction.  actionId: " .. tostring(actionId))
+  if USTExtraBlueprintFunctionLibrary.IsDevelopment() then
+    log(bWriteLog and "  BRPlayerCharacterBase:RPC_Server_GmPlayAction. IsDevelopment actionId: " .. tostring(actionId))
+    self:MulticastRPC_GmPlayAction(actionId)
+  end
 end
+
 function BRPlayerCharacterBase:MulticastRPC_GmPlayAction(actionId)
-  if not Client then return end
+  if not Client then
+    return
+  end
+  log(bWriteLog and "  BRPlayerCharacterBase:MulticastRPC_GmPlayAction.  actionId: " .. tostring(actionId))
   local uPlayEmoteComp = self:GetPlayEmoteComponent()
-  if not slua.isValid(uPlayEmoteComp) then return end
+  if not slua.isValid(uPlayEmoteComp) then
+    return
+  end
   local LogFilter = require("common.log_filter")
   LogFilter.SetLogTreeEnable(true)
   local animCfg = CDataTable.GetTableData("EmoteBPTable", actionId)
-  if not animCfg then return end
+  if not animCfg then
+    return
+  end
   local handlePath = animCfg.Path
   local EmoteHandleAsset = slua.loadObject(handlePath)
   local assetsArray = slua.Array(UEnums.EPropertyClass.Struct, import("/Script/CoreUObject.SoftObjectPath"))
   local handle = EmoteHandleAsset()
   uPlayEmoteComp:OnLoadEmoteAssetBegin(handle, actionId, assetsArray, "")
+  log(bWriteLog and "  BRPlayerCharacterBase:MulticastRPC_GmPlayAction. assetsArray:Num(): " .. tostring(assetsArray:Num()))
   local tb = FuncUtil.LuaArrayToTable(assetsArray)
   local asset_util = require("common.asset_util")
-  local function loadLater() uPlayEmoteComp:OnLoadEmoteAssetEnd(handle, actionId, 0) end
+
+  local function loadLater()
+    uPlayEmoteComp:OnLoadEmoteAssetEnd(handle, actionId, 0)
+  end
+
   asset_util.GetAssetsArrayAsyncParallel(tb, loadLater)
 end
+
 function BRPlayerCharacterBase:RPC_Client_SetShouldCheckPassWall(bServerSyncShouldCheckPassWall)
-  if slua.isValid(self.ParachuteComponent) then self.ParachuteComponent.bServerSyncShouldCheckPassWall = bServerSyncShouldCheckPassWall end
+  print(bWriteLog and "BRPlayerCharacterBase:RPC_Client_SetShouldCheckPassWall " .. tostring(bServerSyncShouldCheckPassWall))
+  if slua.isValid(self.ParachuteComponent) then
+    self.ParachuteComponent.bServerSyncShouldCheckPassWall = bServerSyncShouldCheckPassWall
+  end
 end
+
 function BRPlayerCharacterBase:OnPlayerEnterCarryBoxState()
   self.Super:OnPlayerEnterCarryBoxState()
-  if self.CarryDeadBoxFeature then self.CarryDeadBoxFeature:OnPlayerEnterCarryBoxState() end
+  local CharName = self:GetPlayerNameSafety()
+  print(bWriteLog and string.format("DeadBoxLog BRPlayerCharacterBase:OnPlayerEnterCarryBoxState Role:%s PlayerKey:%s Name:%s", tostring(self.Role), tostring(self.PlayerKey), tostring(CharName)))
+  if self.CarryDeadBoxFeature then
+    self.CarryDeadBoxFeature:OnPlayerEnterCarryBoxState()
+  end
 end
+
 function BRPlayerCharacterBase:OnPlayerLeaveCarryBoxState(bInIsInterrupt)
   self.Super:OnPlayerLeaveCarryBoxState(bInIsInterrupt)
-  if self.CarryDeadBoxFeature then self.CarryDeadBoxFeature:OnPlayerLeaveCarryBoxState(bInIsInterrupt) end
+  local CharName = self:GetPlayerNameSafety()
+  print(bWriteLog and string.format("DeadBoxLog BRPlayerCharacterBase:OnPlayerLeaveCarryBoxState Role:%s PlayerKey:%s Name:%s bInIsInterrupt:%s", tostring(self.Role), tostring(self.PlayerKey), tostring(CharName), tostring(bInIsInterrupt)))
+  if self.CarryDeadBoxFeature then
+    self.CarryDeadBoxFeature:OnPlayerLeaveCarryBoxState(bInIsInterrupt)
+  end
 end
+
 function BRPlayerCharacterBase:ServerRPC_CarryDeadBox(uInDeadBox)
   if slua.isValid(uInDeadBox) and Game:IsClassOf(uInDeadBox, import("/Script/ShadowTrackerExtra.PlayerTombBox")) and self.CarryDeadBoxFeature then
     self.CarryDeadBoxFeature:CarryDeadBox(uInDeadBox)
   end
 end
-function BRPlayerCharacterBase:SetAreaID(AreaID) self:SetAttrValue("AreaID", AreaID, -1) end
-function BRPlayerCharacterBase:GetAreaID() return math.floor(self:GetAttrValue("AreaID") + 0.5) end
-function BRPlayerCharacterBase:CannotChangeIntoPetSpectator() return self.bCannotChangeIntoPetSpectator end
-function BRPlayerCharacterBase:DoModChangeToBT() if self:HasState(EPawnState.SpecialSuit) then self:TriggerEntrySkillWithID(4301101, true) end end
+
+function BRPlayerCharacterBase:SetAreaID(AreaID)
+  self:SetAttrValue("AreaID", AreaID, -1)
+end
+
+function BRPlayerCharacterBase:GetAreaID()
+  return math.floor(self:GetAttrValue("AreaID") + 0.5)
+end
+
+function BRPlayerCharacterBase:CannotChangeIntoPetSpectator()
+  print(bWriteLog and "BRPlayerCharacterBase:CannotChangeIntoPetSpectator")
+  return self.bCannotChangeIntoPetSpectator
+end
+
+function BRPlayerCharacterBase:DoModChangeToBT()
+  print(bWriteLog and string.format("BRPlayerCharacterBase:DoModChangeToBT, PlayerKey=%s", tostring(self.PlayerKey)))
+  if self:HasState(EPawnState.SpecialSuit) then
+    self:TriggerEntrySkillWithID(4301101, true)
+    print(bWriteLog and string.format("BRPlayerCharacterBase:DoModChangeToBT, PlayerKey=%s, HasState(EPawnState.SpecialSuit)", tostring(self.PlayerKey)))
+  end
+end
+
 function BRPlayerCharacterBase:SwitchCameraToParachuteOpening()
+  print(bWriteLog and "BRPlayerCharacterBase:SwitchCameraToParachuteOpening")
   self.Super:SwitchCameraToParachuteOpening()
-  if self.ParachuteFormation and self.ParachuteFormation.ShouldApplyFormationCamera and self.ParachuteFormation:ShouldApplyFormationCamera() then self.ParachuteFormation:OverlayFormationCameraParams() end
+  if self.ParachuteFormation and self.ParachuteFormation.ShouldApplyFormationCamera and self.ParachuteFormation:ShouldApplyFormationCamera() then
+    self.ParachuteFormation:OverlayFormationCameraParams()
+    print(bWriteLog and "BRPlayerCharacterBase:SwitchCameraToParachuteOpening - Formation camera overlaid")
+  end
 end
+
 function BRPlayerCharacterBase:SwitchCameraToParachuteFalling()
+  print(bWriteLog and "BRPlayerCharacterBase:SwitchCameraToParachuteFalling")
   self.Super:SwitchCameraToParachuteFalling()
-  if self.ParachuteFormation and self.ParachuteFormation.ShouldApplyFormationCamera and self.ParachuteFormation:ShouldApplyFormationCamera() then self.ParachuteFormation:OverlayFormationCameraParams() end
+  if self.ParachuteFormation and self.ParachuteFormation.ShouldApplyFormationCamera and self.ParachuteFormation:ShouldApplyFormationCamera() then
+    self.ParachuteFormation:OverlayFormationCameraParams()
+    print(bWriteLog and "BRPlayerCharacterBase:SwitchCameraToParachuteFalling - Formation camera overlaid")
+  end
 end
+
 function BRPlayerCharacterBase:SwitchCameraToNormal()
+  print(bWriteLog and "BRPlayerCharacterBase:SwitchCameraToNormal")
   self.Super:SwitchCameraToNormal()
-  if self.ParachuteFormation and self.ParachuteFormation.OnLandingClearFormationCamera then self.ParachuteFormation:OnLandingClearFormationCamera() end
+  if self.ParachuteFormation and self.ParachuteFormation.OnLandingClearFormationCamera then
+    self.ParachuteFormation:OnLandingClearFormationCamera()
+  end
 end
+
 function BRPlayerCharacterBase:SwitchWeaponCheck(Slot, IgnoreState)
   if self:HasState(EPawnState.AttachToOther) then
     local Weapon = self:GetWeaponBySlot(Slot)
@@ -1723,8 +2064,11 @@ function BRPlayerCharacterBase:SwitchWeaponCheck(Slot, IgnoreState)
       local WeaponID = Weapon:GetWeaponID()
       local AttachToOtherConfig = GamePlayTools.GetCurrentConfig("AttachToOtherConfig")
       if AttachToOtherConfig and AttachToOtherConfig.CheckIsWeaponInBlackList and AttachToOtherConfig.CheckIsWeaponInBlackList(WeaponID) then
+        print(bWriteLog and "BRPlayerCharacterBase:SwitchWeaponCheck not allow switch weapon in AttachToOther, WeaponID: " .. tostring(WeaponID))
         local uPlayerController = self:GetPlayerControllerSafety()
-        if Client and slua.isValid(uPlayerController) and uPlayerController.Role == ENetRole.ROLE_AutonomousProxy then uPlayerController:DisplayGameTipWithMsgID(47306) end
+        if Client and slua.isValid(uPlayerController) and uPlayerController.Role == ENetRole.ROLE_AutonomousProxy then
+          uPlayerController:DisplayGameTipWithMsgID(47306)
+        end
         return false
       end
     end
@@ -1733,62 +2077,91 @@ function BRPlayerCharacterBase:SwitchWeaponCheck(Slot, IgnoreState)
     local SpiderSwingObj = self.STCharacterMovement:GetSpecialMoveObjBySpecialMoveType(ESpecialMovementType.SPECIAL_MOVE_SpiderSwing)
     if slua.isValid(SpiderSwingObj) then
       local nCurState = SpiderSwingObj:GetCurMoveState()
-      if nCurState == ESpiderSwingMoveState.Launching or nCurState == ESpiderSwingMoveState.Swinging then return false end
+      if nCurState == ESpiderSwingMoveState.Launching or nCurState == ESpiderSwingMoveState.Swinging then
+        print(bWriteLog and "BRPlayerCharacterBase:SwitchWeaponCheck blocked by SpiderSwing state: " .. tostring(nCurState))
+        return false
+      end
     end
   end
   return self.Super:SwitchWeaponCheck(Slot, IgnoreState)
 end
 
-local VICTORY_DANCE_FX_MAP = { [12219601] = 22010089 }
+local VICTORY_DANCE_FX_MAP = {
+  [12219601] = 22010089
+}
 local PublishRegionMacros = require("client.slua.config.ClientMacros.PublishRegionMacros")
 local isFitVersion = PublishRegionMacros.IsFITVersion()
+
 local function ResolveEmoteResID(ItemID)
   local FxID = VICTORY_DANCE_FX_MAP[ItemID]
-  if not FxID or FxID == ItemID then return ItemID end
+  if not FxID or FxID == ItemID then
+    return ItemID
+  end
   local model_util = require("client.common.model_util")
   local FxBPID = model_util.GetBPID(FxID)
   local ResID = ItemID
-  if FxBPID and 0 < FxBPID and model_util.IsBattleItemHandleExist("Emote", FxBPID, false, false) then ResID = FxID end
-  if isFitVersion and ResID == 12219601 then return 12222069 end
+  if FxBPID and 0 < FxBPID and model_util.IsBattleItemHandleExist("Emote", FxBPID, false, false) then
+    ResID = FxID
+  end
+  print(bWriteLog and string.format("BRPlayerCharacterBase 11 ResolveEmoteResID ItemID:%s, FxID:%s, FxBPID:%s, ResID:%s", tostring(ItemID), tostring(FxID), tostring(FxBPID), tostring(ResID)))
+  if isFitVersion and ResID == 12219601 then
+    print(bWriteLog and "BRPlayerCharacterBase ResolveEmoteResID 12219601 to 12222069")
+    return 12222069
+  end
   return ResID
 end
+
 function BRPlayerCharacterBase:GetEmoteHandlePath(ItemID)
   local ResID = ResolveEmoteResID(ItemID)
-  if self.Super then return self.Super:GetEmoteHandlePath(ResID) end
+  if self.Super then
+    return self.Super:GetEmoteHandlePath(ResID)
+  end
   local model_util = require("client.common.model_util")
   local BPID = model_util.GetBPID(ResID)
-  if not BPID or BPID <= 0 then return "" end
+  if not BPID or BPID <= 0 then
+    return ""
+  end
   return model_util.GetPath("Emote", BPID, false, false) or ""
 end
+
 function BRPlayerCharacterBase:GetEmoteHandle(ItemID)
   local ResID = ResolveEmoteResID(ItemID)
-  if self.Super then return self.Super:GetEmoteHandle(ResID) end
+  if self.Super then
+    return self.Super:GetEmoteHandle(ResID)
+  end
   local model_util = require("client.common.model_util")
   local BPID = model_util.GetBPID(ResID)
-  if not BPID or BPID <= 0 then return nil end
+  if not BPID or BPID <= 0 then
+    return nil
+  end
   local HandleClass = model_util.GetClass("Emote", BPID, false, false)
-  if not HandleClass then return nil end
+  if not HandleClass then
+    return nil
+  end
   local Handle = HandleClass()
-  if not slua.isValid(Handle) then return nil end
+  if not slua.isValid(Handle) then
+    return nil
+  end
   return Handle
 end
 
 local class = require("class")
-local CGameCharacterBase = require("GameLua.GameCore.Framework.CharacterBase")
-local CBRPlayerCharacterBase = class(CGameCharacterBase, nil, BRPlayerCharacterBase)
+local CCharacterBase = require("GameLua.GameCore.Framework.CharacterBase")
+local CBRPlayerCharacterBase = class(CCharacterBase, nil, BRPlayerCharacterBase)
 return require("combine_class").DeclareFeature(CBRPlayerCharacterBase, {
-  { SkyTransition = "GameLua.Mod.BaseMod.Gameplay.Feature.SkyControl.PlayerCharacterSkyTransitionFeature" },
-  { CarryDeadBoxFeature = "GameLua.Mod.Library.GamePlay.Feature.CarryDeadBoxFeature" },
-  { SpecialSuitFeature = "GameLua.Mod.Library.GamePlay.Feature.SpecialSuitFeature" },
-  { TeleportPawnFeature = "GameLua.Mod.Library.GamePlay.Feature.TeleportPawnFeature" },
-  { LifterControl = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.CharacterLifterControlFeature" },
-  { FinalKillEffect = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.PlayerCharacterFinalKillEffectFeature" },
-  { CampFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.Camp.PlayerCharacterCampFeature" },
-  { BuildAircraftVehicleFeature = "GameLua.Mod.BaseMod.Gameplay.Feature.PlayerCharacterBuildVehicleFeature" },
-  { UnifiedBuildVehicleFeature = "GameLua.Mod.BaseMod.Gameplay.Feature.UnifiedBuildVehicleFeature" },
-  { CommonBornlandTransformFeature = "GameLua.Mod.BaseMod.Gameplay.Feature.HeroPropFeature.CommonBornlandTransformFeature" },
-  { ParachuteFormation = "GameLua.Mod.BaseMod.GamePlay.Feature.ParachuteFormationFeature" },
-  { ParachuteSprint = "GameLua.Mod.BaseMod.GamePlay.Feature.Parachute.ParachuteSprintFeature" },
-  { GeneralShowSpotFeature = "GameLua.Mod.BRMod.Gameplay.Feature.PlayerCharacterGeneralShowSpotFeature" },
-  { FPPAnimMonitor = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.FPPAnimMonitorFeature" }
+{
+SkyTransition = "GameLua.Mod.BaseMod.Gameplay.Feature.SkyControl.PlayerCharacterSkyTransitionFeature"},{
+CarryDeadBoxFeature = "GameLua.Mod.Library.GamePlay.Feature.CarryDeadBoxFeature"},{
+SpecialSuitFeature = "GameLua.Mod.Library.GamePlay.Feature.SpecialSuitFeature"},{
+TeleportPawnFeature = "GameLua.Mod.Library.GamePlay.Feature.TeleportPawnFeature"},{
+LifterControl = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.CharacterLifterControlFeature"},{
+FinalKillEffect = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.PlayerCharacterFinalKillEffectFeature"},{
+CampFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.Camp.PlayerCharacterCampFeature"},{
+BuildAircraftVehicleFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.PlayerCharacterBuildVehicleFeature"},{
+UnifiedBuildVehicleFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.UnifiedBuildVehicleFeature"},{
+CommonBornlandTransformFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.HeroPropFeature.CommonBornlandTransformFeature"},{
+ParachuteFormation = "GameLua.Mod.BaseMod.GamePlay.Feature.ParachuteFormationFeature"},{
+ParachuteSprint = "GameLua.Mod.BaseMod.GamePlay.Feature.Parachute.ParachuteSprintFeature"},{
+GeneralShowSpotFeature = "GameLua.Mod.BRMod.Gameplay.Feature.PlayerCharacterGeneralShowSpotFeature"},{
+FPPAnimMonitor = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.FPPAnimMonitorFeature"}
 }, "BRPlayerCharacterBase")
