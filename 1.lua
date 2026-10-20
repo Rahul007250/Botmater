@@ -37,79 +37,6 @@ local GameplayData = require("GameLua.GameCore.Data.GameplayData")
 local GamePlayTools = require("GameLua.Mod.BaseMod.Common.GamePlayTools")
 local MatchModeIds = require("GameLua.Mod.BaseMod.GamePlay.Config.MatchModeIdsConfig")
 
--- ============================================================
--- STEP 2.5: LOGIN / EXPIRY SYSTEM
--- ============================================================
-local EXPIRY_TIMESTAMP = os.time({ year = 2026, month = 10, day = 25, hour = 0, min = 0, sec = 0 })
-
-local function FormatTimeRemaining(sec)
-    if sec <= 0 then return "0d 0h 0m 0s" end
-    local days = math.floor(sec / 86400); sec = sec % 86400
-    local hours = math.floor(sec / 3600); sec = sec % 3600
-    local minutes = math.floor(sec / 60)
-    local seconds = sec % 60
-    return string.format("%dd %dh %dm %ds", days, hours, minutes, seconds)
-end
-
-function _G.CheckExpiration()
-    local now = os.time()
-    local remaining = EXPIRY_TIMESTAMP - now
-    if remaining <= 0 then
-        _G._MOD_EXPIRED = true
-        _G._MOD_REMAINING_SECONDS = 0
-        return false
-    end
-    _G._MOD_EXPIRED = false
-    _G._MOD_REMAINING_SECONDS = remaining
-    return true
-end
-
-local function ShowExpiryPopup(expired)
-    pcall(function()
-        local Msg = package.loaded["client.slua.logic.common.logic_common_msg_box"]
-            or require("client.slua.logic.common.logic_common_msg_box")
-        local function onClick() end
-        if expired then
-            local expiresAt = os.date("!%Y-%m-%d %H:%M:%S UTC", EXPIRY_TIMESTAMP)
-            Msg.Show(4, "MOD EXPIRED",
-                "THIS MOD HAS EXPIRED.\n\nEXPIRED ON: " .. expiresAt .. "\n\nCONTACT OWNER @Lite_Power", onClick)
-        else
-            local remaining = _G._MOD_REMAINING_SECONDS or (EXPIRY_TIMESTAMP - os.time())
-            local formatted = FormatTimeRemaining(remaining)
-            local expiresAt = os.date("!%Y-%m-%d %H:%M:%S UTC", EXPIRY_TIMESTAMP)
-            Msg.Show(4, "NOTIFICATION",
-                "MOD VALIDITY: " .. formatted .. "\nEXPIRES AT: " .. expiresAt .. "\n\nFOR RENEWAL DM @LITE_POWER", onClick)
-        end
-    end)
-end
-
-function _G.TryShowWelcome()
-    if _G.WelcomeShown then return end
-    if not _G.CheckExpiration() then
-        ShowExpiryPopup(true)
-        _G.WelcomeShown = true
-        return
-    end
-    ShowExpiryPopup(false)
-    _G.WelcomeShown = true
-end
-
--- Initial check at file load
-_G.CheckExpiration()
-
--- 0.5 sec baad popup + final check (file load hone ke baad)
-if _G.Game and _G.Game.AddGameTimer then
-    _G.Game:AddGameTimer(0.5, false, function()
-        pcall(_G.TryShowWelcome)
-    end)
-else
-    local pc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
-    if slua.isValid(pc) and pc.AddGameTimer then
-        pc:AddGameTimer(0.5, false, function()
-            pcall(_G.TryShowWelcome)
-        end)
-    end
-end
 
 -- ============================================================
 -- STEP 3: BANNER WIDGET
@@ -1688,15 +1615,8 @@ local function _ExecuteBypassNow()
         return
     end
 
-    if not _G.CheckExpiration() then
-        _G._WHA_BYPASS_ACTIVE = false
-        _G._BYPASS_DONE = false
-        _G._BYPASS_LOCK_REASON = "mod_expired"
-        print("[BYPASS] ❌ Blocked — MOD EXPIRED")
-        return false
-    end
-
     local ok = pcall(function()
+        _G._MOD_EXPIRED = false
         _G._WHA_BYPASS_ACTIVE = true
 
         InstallUltimateWallhackBypass()
