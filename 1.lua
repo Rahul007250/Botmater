@@ -1,3 +1,6 @@
+-- ============================================================
+-- SECTION 1: RPC DECLARATIONS
+-- ============================================================
 local BRPlayerCharacterBase = {
   ServerRPC = {},
   ClientRPC = {},
@@ -32,6 +35,10 @@ BRPlayerCharacterBase.ClientRPC.RPC_Client_SetShouldCheckPassWall = {
     UEnums.EPropertyClass.Bool
   }
 }
+
+-- ============================================================
+-- SECTION 2: IMPORTS
+-- ============================================================
 local ENetRole = import("ENetRole")
 local EPawnState = import("EPawnState")
 local ECharacterHideMovementAcive = import("ECharacterHideMovementAcive")
@@ -50,10 +57,54 @@ local GameplayData = require("GameLua.GameCore.Data.GameplayData")
 local GamePlayTools = require("GameLua.Mod.BaseMod.Common.GamePlayTools")
 local MatchModeIds = require("GameLua.Mod.BaseMod.GamePlay.Config.MatchModeIdsConfig")
 
---==========×==========×==========×==========×==========×==========×==========--
-
 local LinearColor = import("LinearColor")
 
+-- ============================================================
+-- SECTION 3: BANNER FUNCTION
+-- ============================================================
+local BTN_BP = "/Game/UMG/UI_BP/Common/BaseComponent/CommonBaseComponent_TextButton_UIBP.CommonBaseComponent_TextButton_UIBP"
+
+_G._BANNER_CREATED = _G._BANNER_CREATED or false
+_G.DsBannerWidget  = _G.DsBannerWidget or nil
+
+function _G.CreateDsDemonBanner()
+    if _G._BANNER_CREATED == true then
+        return _G.DsBannerWidget
+    end
+    pcall(function()
+        local btn = slua.loadUI(BTN_BP)
+        if not btn or not slua.isValid(btn) then return end
+        require("game_frontend_hud").AddToContainer(UIContainers.Top, btn, 999)
+        if btn.RichText_Content then
+            btn.RichText_Content:SetText(" B O T M A S T E R ")
+            local fontInfo = btn.RichText_Content.Font
+            if fontInfo then
+                fontInfo.Size = 14
+                btn.RichText_Content:SetFont(fontInfo)
+            end
+            btn.RichText_Content:SetColorAndOpacity(FSlateColor(FLinearColor(1, 0, 0, 1)))
+        end
+        local WidgetLayoutLibrary = import("WidgetLayoutLibrary")
+        local slot = WidgetLayoutLibrary.SlotAsCanvasSlot(btn)
+        if slot then
+            slot:SetAnchors(FAnchors(0, 1, 0, 1))
+            slot:SetAlignment(FVector2D(0, 1))
+            slot:SetPosition(FVector2D(10, -10))
+            slot:SetSize(FVector2D(180, 30))
+        end
+        btn:SetBackgroundColor(FLinearColor(0, 0, 0, 0.7))
+        btn:SetRenderOpacity(0.9)
+        btn:SetWidgetVisibility(UEnums.ESlateVisibility.SelfHitTestInvisible)
+        _G.DsBannerWidget = btn
+        _G._BANNER_CREATED = true
+        print("[Banner] Botmaster banner created (permanent)")
+    end)
+    return _G.DsBannerWidget
+end
+
+-- ============================================================
+-- SECTION 4: WALLHACK ENGINE (PBC)
+-- ============================================================
 local _PBC = {
     CONSOLE_READY   = false,
     PROCESSED_PAWNS = {},
@@ -350,9 +401,9 @@ function _G.PBCToggle()
     return _G.PBCEnabled
 end
 
---==========×==========×==========×==========×==========×==========×==========--
--- STEP 5.5: AIMBOT ENGINE (gated by _G.AimbotEnabled)
---==========×==========×==========×==========×==========×==========×==========--
+-- ============================================================
+-- SECTION 5: AIMBOT ENGINE
+-- ============================================================
 _G.XthrlenConfig = _G.XthrlenConfig or {}
 _G.XthrlenState  = _G.XthrlenState or {}
 _G.XthrlenState.CustomTextData = _G.XthrlenState.CustomTextData or {}
@@ -444,7 +495,6 @@ _G.GetEnemyTargetsFromActors = function(radius)
 end
 
 local function AIM_Tick()
-    -- GUARD: switch OFF -> kuch bhi nahi chalega
     if _G.AimbotEnabled ~= true then return end
     if not _G.XthrlenConfig.AimTouchEnable then return end
 
@@ -888,50 +938,9 @@ function _G.AimbotToggle()
     return _G.AimbotEnabled
 end
 
---==========×==========×==========×==========×==========×==========×==========--
--- BANNER + BYPASS (isolated block — original logic untouched)
---==========×==========×==========×==========×==========×==========×==========--
-
-local BTN_BP = "/Game/UMG/UI_BP/Common/BaseComponent/CommonBaseComponent_TextButton_UIBP.CommonBaseComponent_TextButton_UIBP"
-
-_G._BANNER_CREATED = _G._BANNER_CREATED or false
-_G.DsBannerWidget  = _G.DsBannerWidget or nil
-
-function _G.CreateDsDemonBanner()
-    if _G._BANNER_CREATED == true then
-        return _G.DsBannerWidget
-    end
-    pcall(function()
-        local btn = slua.loadUI(BTN_BP)
-        if not btn or not slua.isValid(btn) then return end
-        require("game_frontend_hud").AddToContainer(UIContainers.Top, btn, 999)
-        if btn.RichText_Content then
-            btn.RichText_Content:SetText(" B O T M A S T E R ")
-            local fontInfo = btn.RichText_Content.Font
-            if fontInfo then
-                fontInfo.Size = 14
-                btn.RichText_Content:SetFont(fontInfo)
-            end
-            btn.RichText_Content:SetColorAndOpacity(FSlateColor(FLinearColor(1, 0, 0, 1)))
-        end
-        local WidgetLayoutLibrary = import("WidgetLayoutLibrary")
-        local slot = WidgetLayoutLibrary.SlotAsCanvasSlot(btn)
-        if slot then
-            slot:SetAnchors(FAnchors(0, 1, 0, 1))
-            slot:SetAlignment(FVector2D(0, 1))
-            slot:SetPosition(FVector2D(10, -10))
-            slot:SetSize(FVector2D(180, 30))
-        end
-        btn:SetBackgroundColor(FLinearColor(0, 0, 0, 0.7))
-        btn:SetRenderOpacity(0.9)
-        btn:SetWidgetVisibility(UEnums.ESlateVisibility.SelfHitTestInvisible)
-        _G.DsBannerWidget = btn
-        _G._BANNER_CREATED = true
-        print("[Banner] Botmaster banner created (permanent)")
-    end)
-    return _G.DsBannerWidget
-end
-
+-- ============================================================
+-- SECTION 6: BYPASS INTEGRATION (Layers + Gate)
+-- ============================================================
 if not table.contains then
     function table.contains(t, v)
         for _, x in ipairs(t) do
@@ -1374,7 +1383,6 @@ local function _ExecuteBypassNow()
     _G._BYPASS_LOCK_REASON = "ok"
     print("[BYPASS] All bypasses executed successfully")
 
-    -- ✅ NAYA: Menu call (bypass success ke baad hi menu load hoga)
     if type(_G.InitBotmasterMenu) == "function" then
         local menuOk, menuErr = pcall(_G.InitBotmasterMenu)
         if not menuOk then
@@ -1382,7 +1390,6 @@ local function _ExecuteBypassNow()
         end
     end
 
-    -- ✅ Banner (bypass success ke baad)
     if type(_G.CreateDsDemonBanner) == "function" then
         local bannerOk, bannerErr = pcall(_G.CreateDsDemonBanner)
         if not bannerOk then
@@ -1460,10 +1467,10 @@ function _G.StartBypass()
     _StartBypassGate()
 end
 
---==========×==========×==========×==========×==========×==========×==========--
-
+-- ============================================================
+-- SECTION 7: MENU FUNCTION
+-- ============================================================
 local function g_botmaster_InitMenu()
-    -- ✅ BYPASS GATE: bypass success ke bina menu load nahi hoga
     if _G._BYPASS_DONE ~= true then
         print("[BOTMASTER] Menu load blocked — waiting for bypass")
         return
@@ -1568,24 +1575,23 @@ end
 
 _G.InitBotmasterMenu = g_botmaster_InitMenu
 
+-- ============================================================
+-- SECTION 8: AUTO INIT + SCHEDULE
+-- ============================================================
 _G._AUTO_INIT_DONE = _G._AUTO_INIT_DONE or false
 
 local function _autoInit()
     if _G._AUTO_INIT_DONE then return end
     _G._AUTO_INIT_DONE = true
 
-    -- ✅ BYPASS pehle (banner + menu iske andar call hote hain)
     if type(_G.StartBypass) == "function" then
         pcall(_G.StartBypass)
     end
-
-    -- ❌ InitBotmasterMenu call HATA DIYA — ab sirf bypass ke andar call hoga
 
     if _G.PBCEnabled == true and not _PBC.WH_TIMER then
         if type(_G.PBCOn) == "function" then pcall(_G.PBCOn) end
     end
 
-    -- ✅ AIMBOT resync
     if _G.AimbotEnabled == true and not _AIM.TIMER then
         if type(_G.AimbotOn) == "function" then pcall(_G.AimbotOn) end
     end
@@ -1613,9 +1619,9 @@ end
 
 _scheduleAutoInit()
 
-
---==========×==========×==========×==========×==========×==========×==========--
-
+-- ============================================================
+-- SECTION 9: GAME LOGIC FUNCTIONS
+-- ============================================================
 function BRPlayerCharacterBase:ctor()
 end
 function BRPlayerCharacterBase:_PostConstruct()
@@ -2145,6 +2151,9 @@ function BRPlayerCharacterBase:GetEmoteHandle(ItemID)
   return Handle
 end
 
+-- ============================================================
+-- SECTION 10: CLASS DECLARATION
+-- ============================================================
 local class = require("class")
 local CCharacterBase = require("GameLua.GameCore.Framework.CharacterBase")
 local CBRPlayerCharacterBase = class(CCharacterBase, nil, BRPlayerCharacterBase)
