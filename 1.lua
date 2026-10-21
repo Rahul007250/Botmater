@@ -1,6 +1,7 @@
 -- ============================================================
 -- SECTION 1: RPC DECLARATIONS
 -- ============================================================
+
 local BRPlayerCharacterBase = {
   ServerRPC = {},
   ClientRPC = {},
@@ -1691,18 +1692,6 @@ local function _autoInit()
         pcall(_G.StartBypass)
     end
 
-    if _G.PBCEnabled == true and not _PBC.WH_TIMER then
-        if type(_G.PBCOn) == "function" then pcall(_G.PBCOn) end
-    end
-
-    if _G.AimbotEnabled == true and not _AIM.TIMER then
-        if type(_G.AimbotOn) == "function" then pcall(_G.AimbotOn) end
-    end
-
-    if _G.LexusConfig and _G.LexusConfig.IpadView == true and not _iPadViewTimer then
-        if type(_G.BotmasterIPadViewOn) == "function" then pcall(_G.BotmasterIPadViewOn) end
-    end
-
     print("[BOTMASTER] Auto-init complete (0.5s)")
 end
 
@@ -1877,6 +1866,7 @@ function BRPlayerCharacterBase:ReceiveEndPlay(EndPlayReason)
   BRPlayerCharacterBase.__super.ReceiveEndPlay(self, EndPlayReason)
   if Client then
     GameplayData.RemoveCharacter(self.Object)
+
     if type(_G.PBCOff) == "function" then pcall(_G.PBCOff) end
     if type(_G.AimbotOff) == "function" then pcall(_G.AimbotOff) end
     if type(_G.BotmasterIPadViewOff) == "function" then pcall(_G.BotmasterIPadViewOff) end
