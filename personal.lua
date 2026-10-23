@@ -725,11 +725,49 @@ function _G.BotmasterIPadViewToggle()
 end
 
 -- ============================================================
--- SECTION 5.6: REAL SILENT AIM ENGINE
+-- SECTION 5.6: REAL SILENT AIM ENGINE (WITH CLEAN RESET)
 -- ============================================================
 _G.RealSilentAimEnabled = _G.RealSilentAimEnabled or false
 
 local _SILENT = { TIMER = nil, TIMER_OWNER = nil }
+
+-- Clean Reset Cache: stores original GameDeviationFactor per weapon
+local _SILENT_Originals = {}
+
+local function SILENT_GetWeaponKey(shootWeapon)
+    if not slua.isValid(shootWeapon) then return nil end
+    return tostring(shootWeapon)
+end
+
+local function SILENT_TrackAndApply(shootWeapon)
+    if not slua.isValid(shootWeapon) then return end
+    local key = SILENT_GetWeaponKey(shootWeapon)
+    if not key then return end
+
+    -- Save original value ONCE per weapon
+    if not _SILENT_Originals[key] then
+        _SILENT_Originals[key] = {
+            weapon              = shootWeapon,
+            GameDeviationFactor = shootWeapon.GameDeviationFactor
+        }
+    end
+
+    pcall(function()
+        shootWeapon.GameDeviationFactor = 0
+    end)
+end
+
+local function SILENT_RestoreAll()
+    if not _SILENT_Originals then return end
+    for _, entry in pairs(_SILENT_Originals) do
+        if entry.weapon and slua.isValid(entry.weapon) then
+            pcall(function()
+                entry.weapon.GameDeviationFactor = entry.GameDeviationFactor
+            end)
+        end
+    end
+    _SILENT_Originals = {}
+end
 
 local function SILENT_GetNearestEnemy(playerPawn, maxDist)
     maxDist = maxDist or 50000
@@ -765,11 +803,7 @@ local function SILENT_Apply(playerPawn)
     local shootWeapon = currentWeapon.ShootWeaponEntity or currentWeapon.ShootWeaponEntity_GEN_VARIABLE
     if not slua.isValid(shootWeapon) then return end
 
-    pcall(function()
-
-        shootWeapon.GameDeviationFactor      = 0
-
-    end)
+    SILENT_TrackAndApply(shootWeapon)
 
     local target = SILENT_GetNearestEnemy(playerPawn)
     if not slua.isValid(target) then return end
@@ -835,6 +869,7 @@ local function SILENT_Start()
 end
 
 local function SILENT_Stop()
+    -- 1. Stop the tick timer
     if _SILENT.TIMER and _SILENT.TIMER_OWNER then
         pcall(function()
             if _SILENT.TIMER_OWNER.RemoveGameTimer then
@@ -843,7 +878,11 @@ local function SILENT_Stop()
         end)
     end
     _SILENT.TIMER, _SILENT.TIMER_OWNER = nil, nil
-    print("[SILENT] Cleanup done")
+
+    -- 2. Restore every modified weapon to its original state (glass emptied)
+    SILENT_RestoreAll()
+
+    print("[SILENT] Cleanup done — all weapon values restored to original")
 end
 
 function _G.RealSilentAimOn()
@@ -856,7 +895,7 @@ end
 function _G.RealSilentAimOff()
     _G.RealSilentAimEnabled = false
     pcall(SILENT_Stop)
-    print("[SILENT] Real Silent Aim OFF")
+    print("[SILENT] Real Silent Aim OFF — fully reset")
 end
 
 function _G.RealSilentAimToggle()
