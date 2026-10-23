@@ -668,7 +668,7 @@ local function g_masterahsanyt_ApplyiPadView()
     if player.bIsWeaponAiming then return end
 
     if _G.LexusConfig.IpadView then
-        local targetFOV = _G.LexusState.CustomTextData.IpadViewFOV or 120
+        local targetFOV = _G.LexusState.CustomTextData.IpadViewFOV or 108
         if cam.FieldOfView ~= targetFOV then
             cam.FieldOfView = targetFOV
         end
@@ -682,7 +682,7 @@ end
 local function _iPadViewTick()
     if _G.LexusConfig.IpadView ~= true then return end
     pcall(g_masterahsanyt_ApplyiPadView)
-    
+
     if _G.Game and _G.Game.AddGameTimer then
         _iPadViewTimerOwner = _G.Game
         _iPadViewTimer = _G.Game:AddGameTimer(0.5, false, _iPadViewTick)
@@ -724,6 +724,282 @@ function _G.BotmasterIPadViewToggle()
     return _G.LexusConfig.IpadView
 end
 
+-- ============================================================
+-- SECTION 5.6: SILENT AIM ENGINE (BOTMASTER)
+-- ============================================================
+_G.BotmasterSilentAimConfig = _G.BotmasterSilentAimConfig or {
+    Enabled       = false,
+    Rate          = 0.05,
+    BoneName      = "head",
+    HeadOffsetZ   = 75,
+    MaxDist       = 30000,
+    IgnoreKnocked = true,
+    IgnoreBots    = false,
+    ApplyProps    = true,
+}
+_G.BotmasterSilentAimState = _G.BotmasterSilentAimState or {
+    Timer          = nil,
+    TimerOwner     = nil,
+    LastShot       = 0,
+    ModifiedWeapon = nil,
+    OriginalProps  = nil,
+}
+local _SA  = _G.BotmasterSilentAimState
+local _SAC = _G.BotmasterSilentAimConfig
+
+local function SA_MakeVec(x, y, z)
+    pcall(function()
+        if FVector and FVector.New then
+            local ok, v = pcall(FVector.New, x, y, z)
+            if ok and v then return v end
+        end
+    end)
+    pcall(function()
+        if FVector then
+            local ok, v = pcall(FVector, x, y, z)
+            if ok and v then return v end
+        end
+    end)
+    return { X = x, Y = y, Z = z }
+end
+
+local function SA_GetNearestEnemy(playerPawn)
+    if not playerPawn then return nil end
+    local ok, enemies = pcall(function() return _G.GetEnemyTargetsFromActors(_SAC.MaxDist) end)
+    if not ok or not enemies or #enemies == 0 then return nil end
+    local best, bestDist = nil, math.huge
+    for _, e in ipairs(enemies) do
+        if slua.isValid(e) and e:IsAlive() then
+            local skip = false
+            if _SAC.IgnoreKnocked and e.HealthStatus == 1 then skip = true end
+            if not skip and _SAC.IgnoreBots then
+                if e.bIsAI == true or e.IsAI == true then skip = true end
+                local ps = e.PlayerState
+                if not skip and slua.isValid(ps) and (ps.bIsABot or ps.bIsBot) then skip = true end
+            end
+            if not skip then
+                local d = playerPawn:GetDistanceTo(e)
+                if d and d < bestDist then best, bestDist = e, d end
+            end
+        end
+    end
+    return best
+end
+
+local function SA_GetBoneLocation(target, boneName, headOffsetZ)
+    if not slua.isValid(target) then return nil end
+    local pos = nil
+    pcall(function()
+        if type(target.GetBonePos) == "function" then
+            pos = target:GetBonePos(boneName, { X = 0, Y = 0, Z = 0 })
+        end
+    end)
+    if not pos or (pos.X == 0 and pos.Y == 0 and pos.Z == 0) then
+        pcall(function()
+            if type(target.GetSocketLocation) == "function" then
+                pos = target:GetSocketLocation(boneName)
+            end
+        end)
+    end
+    if not pos or (pos.X == 0 and pos.Y == 0 and pos.Z == 0) then
+        pcall(function()
+            if type(target.K2_GetActorLocation) == "function" then
+                local loc = target:K2_GetActorLocation()
+                if loc then
+                    pos = { X = loc.X, Y = loc.Y, Z = loc.Z + (headOffsetZ or 75) }
+                end
+            end
+        end)
+    end
+    return pos
+end
+
+local function SA_ApplyWeaponProps(shootWeapon)
+    if not _SAC.ApplyProps then return end
+    if _SA.ModifiedWeapon == shootWeapon then return end
+    if not _SA.OriginalProps then
+        _SA.OriginalProps = {
+            BulletFireSpeed          = shootWeapon.BulletFireSpeed,
+            TraceDistance            = shootWeapon.TraceDistance,
+            GameDeviationFactor      = shootWeapon.GameDeviationFactor,
+            AccessoriesHRecoilFactor = shootWeapon.AccessoriesHRecoilFactor,
+            AccessoriesVRecoilFactor = shootWeapon.AccessoriesVRecoilFactor,
+            RecoilKickADS            = shootWeapon.RecoilKickADS,
+            ShootSightReturnSpeed    = shootWeapon.ShootSightReturnSpeed,
+        }
+    end
+    pcall(function()
+        shootWeapon.BulletFireSpeed          = 50000
+        shootWeapon.TraceDistance            = 50000
+        shootWeapon.GameDeviationFactor      = 0
+        shootWeapon.AccessoriesHRecoilFactor = 0
+        shootWeapon.AccessoriesVRecoilFactor = 0
+        shootWeapon.RecoilKickADS            = 0
+        shootWeapon.ShootSightReturnSpeed    = 30
+    end)
+    _SA.ModifiedWeapon = shootWeapon
+end
+
+local function SA_RestoreWeaponProps()
+    if _SA.ModifiedWeapon and _SA.OriginalProps then
+        pcall(function()
+            for k, v in pairs(_SA.OriginalProps) do
+                if v ~= nil then _SA.ModifiedWeapon[k] = v end
+            end
+        end)
+    end
+    _SA.ModifiedWeapon = nil
+    _SA.OriginalProps  = nil
+end
+
+local function SA_Fire(playerPawn)
+    if not slua.isValid(playerPawn) then return end
+    local currentWeapon = nil
+    pcall(function()
+        if type(playerPawn.GetCurrentWeapon) == "function" then
+            currentWeapon = playerPawn:GetCurrentWeapon()
+        end
+        if not slua.isValid(currentWeapon) and playerPawn.WeaponManagerComponent then
+            currentWeapon = playerPawn.WeaponManagerComponent.CurrentWeaponReplicated
+        end
+    end)
+    if not slua.isValid(currentWeapon) then return end
+
+    local shootWeapon = currentWeapon.ShootWeaponEntity or currentWeapon.ShootWeaponEntity_GEN_VARIABLE
+    if not slua.isValid(shootWeapon) and currentWeapon.ShootWeaponComponent then
+        shootWeapon = currentWeapon.ShootWeaponComponent
+    end
+    if not slua.isValid(shootWeapon) then return end
+
+    SA_ApplyWeaponProps(shootWeapon)
+
+    local target = SA_GetNearestEnemy(playerPawn)
+    if not slua.isValid(target) then return end
+
+    local headLoc = SA_GetBoneLocation(target, _SAC.BoneName, _SAC.HeadOffsetZ)
+    if not headLoc then return end
+
+    if shootWeapon.OnFireHitServer then
+        local normal = SA_MakeVec(0, 0, 0)
+        pcall(function()
+            shootWeapon:OnFireHitServer(target, headLoc, normal, _SAC.BoneName)
+        end)
+    end
+end
+
+local function SA_Tick()
+    if not _SAC.Enabled then return end
+    pcall(function()
+        local player = GameplayData.GetPlayerCharacter()
+        if not slua.isValid(player) then return end
+        if not player.bIsWeaponFiring then return end
+        local now = os.clock()
+        if (now - _SA.LastShot) < _SAC.Rate then return end
+        SA_Fire(player)
+        _SA.LastShot = now
+    end)
+end
+
+function _G.SilentAimOn()
+    if _SAC.Enabled and _SA.Timer then return end
+    _SAC.Enabled = true
+    _SA.LastShot = 0
+    local started = false
+    if _G.Game and _G.Game.AddGameTimer then
+        _SA.TimerOwner = _G.Game
+        _SA.Timer = _G.Game:AddGameTimer(0.016, true, SA_Tick)
+        started = true
+    else
+        local pc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
+        if slua.isValid(pc) and pc.AddGameTimer then
+            _SA.TimerOwner = pc
+            _SA.Timer = pc:AddGameTimer(0.016, true, SA_Tick)
+            started = true
+        end
+    end
+    if started then print("[SILENT AIM] ON") else print("[SILENT AIM] Timer failed") end
+end
+
+function _G.SilentAimOff()
+    _SAC.Enabled = false
+    if _SA.Timer and _SA.TimerOwner then
+        pcall(function()
+            if _SA.TimerOwner.RemoveGameTimer then
+                _SA.TimerOwner:RemoveGameTimer(_SA.Timer)
+            end
+        end)
+    end
+    _SA.Timer      = nil
+    _SA.TimerOwner = nil
+    _SA.LastShot   = 0
+    SA_RestoreWeaponProps()
+    print("[SILENT AIM] OFF — fully reset")
+end
+
+function _G.SilentAimToggle()
+    if _SAC.Enabled then _G.SilentAimOff() else _G.SilentAimOn() end
+    return _SAC.Enabled
+end
+
+-- ============================================================
+-- SECTION 5.7: SMALL CROSSHAIR (CENTER DOT)
+-- ============================================================
+_G.BotmasterCrosshairConfig  = _G.BotmasterCrosshairConfig  or { Enabled = false }
+_G.BotmasterCrosshairWidget  = _G.BotmasterCrosshairWidget  or nil
+_G.BotmasterCrosshairCreated = _G.BotmasterCrosshairCreated or false
+
+local function Crosshair_Build()
+    if _G.BotmasterCrosshairCreated and _G.BotmasterCrosshairWidget then return end
+    pcall(function()
+        local btn = slua.loadUI(BTN_BP)
+        if not btn or not slua.isValid(btn) then return end
+        require("game_frontend_hud").AddToContainer(UIContainers.Top, btn, 1000)
+        if btn.RichText_Content then
+            btn.RichText_Content:SetText("+")
+            local f = btn.RichText_Content.Font
+            if f then
+                f.Size = 22
+                btn.RichText_Content:SetFont(f)
+            end
+            btn.RichText_Content:SetColorAndOpacity(FSlateColor(FLinearColor(0.2, 1, 0.2, 1)))
+        end
+        local WLL = import("WidgetLayoutLibrary")
+        local slot = WLL.SlotAsCanvasSlot(btn)
+        if slot then
+            slot:SetAnchors(FAnchors(0.5, 0.5, 0.5, 0.5))
+            slot:SetAlignment(FVector2D(0.5, 0.5))
+            slot:SetPosition(FVector2D(0, 0))
+            slot:SetSize(FVector2D(40, 40))
+        end
+        btn:SetBackgroundColor(FLinearColor(0, 0, 0, 0))
+        btn:SetRenderOpacity(1)
+        _G.BotmasterCrosshairWidget  = btn
+        _G.BotmasterCrosshairCreated = true
+    end)
+end
+
+function _G.BotmasterCrosshairOn()
+    if _G.BotmasterCrosshairConfig.Enabled then return end
+    _G.BotmasterCrosshairConfig.Enabled = true
+    Crosshair_Build()
+    if _G.BotmasterCrosshairWidget and slua.isValid(_G.BotmasterCrosshairWidget) then
+        _G.BotmasterCrosshairWidget:SetWidgetVisibility(UEnums.ESlateVisibility.SelfHitTestInvisible)
+    end
+    print("[CROSSHAIR] ON")
+end
+
+function _G.BotmasterCrosshairOff()
+    _G.BotmasterCrosshairConfig.Enabled = false
+    if _G.BotmasterCrosshairWidget and slua.isValid(_G.BotmasterCrosshairWidget) then
+        _G.BotmasterCrosshairWidget:SetWidgetVisibility(UEnums.ESlateVisibility.Collapsed)
+    end
+    print("[CROSSHAIR] OFF")
+end
+
+function _G.BotmasterCrosshairToggle()
+    if _G.BotmasterCrosshairConfig.Enabled then _G.BotmasterCrosshairOff() else _G.BotmasterCrosshairOn() end
+    return _G.BotmasterCrosshairConfig.Enabled
+end
 
 -- ============================================================
 -- SECTION 6: BYPASS INTEGRATION (Layers + Gate)
@@ -1290,6 +1566,40 @@ local function g_botmaster_InitMenu()
             end
         },
         {
+            Key  = "BotmasterSilentAim",
+            UI   = AliasMap.Switcher,
+            Text = "Silent Aim",
+            GetFunc = function()
+                return _G.BotmasterSilentAimConfig.Enabled == true
+            end,
+            SetFunc = function(c, v)
+                local on = (v == true or v == 1)
+                if on then
+                    if _G.SilentAimOn then pcall(_G.SilentAimOn) end
+                else
+                    if _G.SilentAimOff then pcall(_G.SilentAimOff) end
+                end
+                return true
+            end
+        },
+        {
+            Key  = "BotmasterCrosshair",
+            UI   = AliasMap.Switcher,
+            Text = "Small Crosshair",
+            GetFunc = function()
+                return _G.BotmasterCrosshairConfig.Enabled == true
+            end,
+            SetFunc = function(c, v)
+                local on = (v == true or v == 1)
+                if on then
+                    if _G.BotmasterCrosshairOn then pcall(_G.BotmasterCrosshairOn) end
+                else
+                    if _G.BotmasterCrosshairOff then pcall(_G.BotmasterCrosshairOff) end
+                end
+                return true
+            end
+        },
+        {
             Key  = "BotmasterIPadView",
             UI   = AliasMap.Switcher,
             Text = "Player iPad View",
@@ -1438,7 +1748,7 @@ function BRPlayerCharacterBase:ReceiveBeginPlay()
   if Client then
     printf(bWriteLog and "BRPlayerCharacterBase:ReceiveBeginPlay, PlayerKey:%u ", self.PlayerKey)
     GameplayData.AddCharacter(self.Object)
-    
+
     if _G._AUTO_INIT_DONE ~= true then _autoInit() end
   else
     self:AddCommonEventWithConditions(EVENTTYPE_INGAME_NORMAL, EVENTID_GAME_MODE_STATE_CHANGE, {
@@ -1550,8 +1860,10 @@ function BRPlayerCharacterBase:ReceiveEndPlay(EndPlayReason)
   if Client then
     GameplayData.RemoveCharacter(self.Object)
 
-    if type(_G.AimbotOff) == "function" then pcall(_G.AimbotOff) end
-    if type(_G.BotmasterIPadViewOff) == "function" then pcall(_G.BotmasterIPadViewOff) end
+    if type(_G.AimbotOff)             == "function" then pcall(_G.AimbotOff) end
+    if type(_G.SilentAimOff)          == "function" then pcall(_G.SilentAimOff) end
+    if type(_G.BotmasterCrosshairOff) == "function" then pcall(_G.BotmasterCrosshairOff) end
+    if type(_G.BotmasterIPadViewOff)  == "function" then pcall(_G.BotmasterIPadViewOff) end
   end
 end
 
