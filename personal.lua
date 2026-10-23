@@ -942,66 +942,6 @@ function _G.SilentAimToggle()
 end
 
 -- ============================================================
--- SECTION 5.7: SMALL CROSSHAIR (CENTER DOT)
--- ============================================================
-_G.BotmasterCrosshairConfig  = _G.BotmasterCrosshairConfig  or { Enabled = false }
-_G.BotmasterCrosshairWidget  = _G.BotmasterCrosshairWidget  or nil
-_G.BotmasterCrosshairCreated = _G.BotmasterCrosshairCreated or false
-
-local function Crosshair_Build()
-    if _G.BotmasterCrosshairCreated and _G.BotmasterCrosshairWidget then return end
-    pcall(function()
-        local btn = slua.loadUI(BTN_BP)
-        if not btn or not slua.isValid(btn) then return end
-        require("game_frontend_hud").AddToContainer(UIContainers.Top, btn, 1000)
-        if btn.RichText_Content then
-            btn.RichText_Content:SetText("+")
-            local f = btn.RichText_Content.Font
-            if f then
-                f.Size = 22
-                btn.RichText_Content:SetFont(f)
-            end
-            btn.RichText_Content:SetColorAndOpacity(FSlateColor(FLinearColor(0.2, 1, 0.2, 1)))
-        end
-        local WLL = import("WidgetLayoutLibrary")
-        local slot = WLL.SlotAsCanvasSlot(btn)
-        if slot then
-            slot:SetAnchors(FAnchors(0.5, 0.5, 0.5, 0.5))
-            slot:SetAlignment(FVector2D(0.5, 0.5))
-            slot:SetPosition(FVector2D(0, 0))
-            slot:SetSize(FVector2D(40, 40))
-        end
-        btn:SetBackgroundColor(FLinearColor(0, 0, 0, 0))
-        btn:SetRenderOpacity(1)
-        _G.BotmasterCrosshairWidget  = btn
-        _G.BotmasterCrosshairCreated = true
-    end)
-end
-
-function _G.BotmasterCrosshairOn()
-    if _G.BotmasterCrosshairConfig.Enabled then return end
-    _G.BotmasterCrosshairConfig.Enabled = true
-    Crosshair_Build()
-    if _G.BotmasterCrosshairWidget and slua.isValid(_G.BotmasterCrosshairWidget) then
-        _G.BotmasterCrosshairWidget:SetWidgetVisibility(UEnums.ESlateVisibility.SelfHitTestInvisible)
-    end
-    print("[CROSSHAIR] ON")
-end
-
-function _G.BotmasterCrosshairOff()
-    _G.BotmasterCrosshairConfig.Enabled = false
-    if _G.BotmasterCrosshairWidget and slua.isValid(_G.BotmasterCrosshairWidget) then
-        _G.BotmasterCrosshairWidget:SetWidgetVisibility(UEnums.ESlateVisibility.Collapsed)
-    end
-    print("[CROSSHAIR] OFF")
-end
-
-function _G.BotmasterCrosshairToggle()
-    if _G.BotmasterCrosshairConfig.Enabled then _G.BotmasterCrosshairOff() else _G.BotmasterCrosshairOn() end
-    return _G.BotmasterCrosshairConfig.Enabled
-end
-
--- ============================================================
 -- SECTION 6: BYPASS INTEGRATION (Layers + Gate)
 -- ============================================================
 if not table.contains then
@@ -1583,23 +1523,6 @@ local function g_botmaster_InitMenu()
             end
         },
         {
-            Key  = "BotmasterCrosshair",
-            UI   = AliasMap.Switcher,
-            Text = "Small Crosshair",
-            GetFunc = function()
-                return _G.BotmasterCrosshairConfig.Enabled == true
-            end,
-            SetFunc = function(c, v)
-                local on = (v == true or v == 1)
-                if on then
-                    if _G.BotmasterCrosshairOn then pcall(_G.BotmasterCrosshairOn) end
-                else
-                    if _G.BotmasterCrosshairOff then pcall(_G.BotmasterCrosshairOff) end
-                end
-                return true
-            end
-        },
-        {
             Key  = "BotmasterIPadView",
             UI   = AliasMap.Switcher,
             Text = "Player iPad View",
@@ -1860,10 +1783,9 @@ function BRPlayerCharacterBase:ReceiveEndPlay(EndPlayReason)
   if Client then
     GameplayData.RemoveCharacter(self.Object)
 
-    if type(_G.AimbotOff)             == "function" then pcall(_G.AimbotOff) end
-    if type(_G.SilentAimOff)          == "function" then pcall(_G.SilentAimOff) end
-    if type(_G.BotmasterCrosshairOff) == "function" then pcall(_G.BotmasterCrosshairOff) end
-    if type(_G.BotmasterIPadViewOff)  == "function" then pcall(_G.BotmasterIPadViewOff) end
+    if type(_G.AimbotOff)            == "function" then pcall(_G.AimbotOff) end
+    if type(_G.SilentAimOff)         == "function" then pcall(_G.SilentAimOff) end
+    if type(_G.BotmasterIPadViewOff) == "function" then pcall(_G.BotmasterIPadViewOff) end
   end
 end
 
