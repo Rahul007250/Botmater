@@ -104,6 +104,305 @@ function _G.CreateDsDemonBanner()
 end
 
 -- ============================================================
+-- SECTION 4: WALLHACK ENGINE (PBC)
+-- ============================================================
+local _PBC = {
+    CONSOLE_READY   = false,
+    PROCESSED_PAWNS = {},
+    TICK_COUNT      = 0,
+    WH_TIMER        = nil,
+    TIMER_OWNER     = nil,
+    colors          = nil,
+    BotDetectCache  = {}
+}
+
+local PBC_TICK_INTERVAL       = 0.3
+local PBC_MAX_PAWNS_PER_TICK  = 20
+local PBC_RESET_EVERY         = 6
+local PBC_AVATAR_SLOTS        = {0,1,2,3,4,5,6,7}
+
+pcall(function()
+    _PBC.colors = {
+        vis  = LinearColor(0, 100, 100, 100),
+        occ  = LinearColor(0, 100, 0, 100),
+        bVis = LinearColor(100, 0, 100, 100),
+        bOcc = LinearColor(100, 100, 5, 100)
+    }
+end)
+
+local function PBC_SetupConsole()
+    if _PBC.CONSOLE_READY then return end
+    pcall(function()
+        local KSL = import("KismetSystemLibrary")
+        local world = slua.getWorld()
+        if not KSL or not world then return end
+        KSL.ExecuteConsoleCommand(world, "r.EnableDrawDyeingColor 1")
+        KSL.ExecuteConsoleCommand(world, "r.CustomDepth 3")
+        KSL.ExecuteConsoleCommand(world, "r.IdeaOutline.Enable 1")
+        KSL.ExecuteConsoleCommand(world, "r.Highlight.Enable 1")
+        _PBC.CONSOLE_READY = true
+        print("[PBC] Console ready")
+    end)
+end
+
+local function PBC_DisableConsole()
+    pcall(function()
+        local KSL = import("KismetSystemLibrary")
+        local world = slua.getWorld()
+        if not KSL or not world then return end
+        KSL.ExecuteConsoleCommand(world, "r.IdeaOutline.Enable 0")
+        KSL.ExecuteConsoleCommand(world, "r.Highlight.Enable 0")
+        KSL.ExecuteConsoleCommand(world, "r.EnableDrawDyeingColor 0")
+    end)
+    _PBC.CONSOLE_READY = false
+end
+
+local function PBC_ApplyToMesh(mesh, visColor, occColor)
+    if not mesh or not slua.isValid(mesh) then return end
+    pcall(function()
+        mesh:SetDrawDyeing(true)
+        mesh:SetDrawDyeingMode(1)
+        mesh:SetVisibleDyeingColor(visColor)
+        mesh:SetOccludedDyeingColor(occColor)
+        mesh:SetDyeingColorFadeDistance(99999.0)
+        mesh:SetDyeingColorMinMaxDistance(0.0, 99999.0)
+        mesh:SetDrawHighlight(true)
+        mesh:OverrideHighlightColor(visColor)
+        mesh:SetHighlightCanBeOccluded(false)
+        mesh:SetDrawIdeaOutline(true)
+        mesh:SetIdeaOutlineNew(true)
+        mesh:SetIdeaOutlineOcclusionHighlight(true)
+        mesh:OverrideIdeaOutlineColor(visColor)
+        mesh:SetIdeaOutlineOcclusionColor(occColor)
+        mesh:OverrideIdeaOutlineThickness(20.0)
+        mesh:SetIdeaOverrideOutlineAndOcclusion(true)
+        mesh:SetRenderCustomDepth(true)
+        mesh:SetCustomDepthStencilValue(255)
+    end)
+end
+
+local function PBC_ClearMeshVisuals(mesh)
+    if not mesh or not slua.isValid(mesh) then return end
+    pcall(function()
+        mesh:SetDrawDyeing(false)
+        mesh:SetDrawDyeingMode(0)
+        mesh:SetDyeingColorFadeDistance(0.0)
+        mesh:SetDyeingColorMinMaxDistance(0.0, 0.0)
+        mesh:SetDrawHighlight(false)
+        mesh:SetHighlightCanBeOccluded(true)
+        mesh:SetDrawIdeaOutline(false)
+        mesh:SetIdeaOutlineNew(false)
+        mesh:SetIdeaOutlineOcclusionHighlight(false)
+        mesh:SetIdeaOverrideOutlineAndOcclusion(false)
+        mesh:OverrideIdeaOutlineThickness(0.0)
+        mesh:SetRenderCustomDepth(false)
+        mesh:SetCustomDepthStencilValue(0)
+    end)
+end
+
+local function PBC_ClearAllVisuals()
+    if not Game or not Game.GetAllPlayerPawns then return end
+    pcall(function()
+        local SKC = import("SkeletalMeshComponent")
+        local SMC = import("StaticMeshComponent")
+        local allPawns = Game:GetAllPlayerPawns() or {}
+        for _, pawn in pairs(allPawns) do
+            if slua.isValid(pawn) then
+                pcall(function()
+                    if slua.isValid(pawn.Mesh) then PBC_ClearMeshVisuals(pawn.Mesh) end
+                    local av = pawn.CharacterAvatarComp2_BP or pawn:getAvatarComponent2()
+                    if av and av.GetMeshCompBySlot then
+                        for _, s in ipairs(PBC_AVATAR_SLOTS) do
+                            local m = av:GetMeshCompBySlot(s)
+                            if slua.isValid(m) then PBC_ClearMeshVisuals(m) end
+                        end
+                    end
+                    if SKC then
+                        local sk = pawn:GetComponentsByClass(SKC)
+                        if sk then
+                            for i = 0, sk:Num() - 1 do
+                                local c = sk:Get(i)
+                                if slua.isValid(c) and c ~= pawn.Mesh then PBC_ClearMeshVisuals(c) end
+                            end
+                        end
+                    end
+                    if SMC then
+                        local st = pawn:GetComponentsByClass(SMC)
+                        if st then
+                            for i = 0, st:Num() - 1 do PBC_ClearMeshVisuals(st:Get(i)) end
+                        end
+                    end
+                    local w = pawn:GetCurrentWeapon()
+                    if slua.isValid(w) and slua.isValid(w.Mesh) then PBC_ClearMeshVisuals(w.Mesh) end
+                end)
+            end
+        end
+    end)
+end
+
+local function PBC_IsPawnAlive(p)
+    if not slua.isValid(p) then return false end
+    if p.Health and p.Health > 0 then return true end
+    return false
+end
+
+local function PBC_DetectIsBot(pawn)
+    if not slua.isValid(pawn) then return false end
+    local pk = pawn.PlayerKey
+    if pk and _PBC.BotDetectCache[pk] ~= nil then return _PBC.BotDetectCache[pk] end
+    local r = false
+    pcall(function()
+        if Game and Game.IsAI then
+            local a = Game:IsAI(pawn)
+            if a == true or a == 1 then r = true end
+        end
+    end)
+    if not r then
+        if pawn.bIsAI == true or pawn.IsAI == true then r = true end
+        if pawn.bIsABot == true or pawn.bBot == true then r = true end
+    end
+    if not r then
+        local ps = pawn.PlayerState
+        if slua.isValid(ps) and (ps.bIsABot or ps.bIsBot or ps.bIsAI) then r = true end
+    end
+    if pk then _PBC.BotDetectCache[pk] = r end
+    return r
+end
+
+local function PBC_tick()
+    if _G.PBCEnabled ~= true then return end
+    pcall(function()
+        local lp = GameplayData.GetPlayerCharacter()
+        if not slua.isValid(lp) then return end
+        PBC_SetupConsole()
+        if not _PBC.colors then return end
+
+        _PBC.TICK_COUNT = _PBC.TICK_COUNT + 1
+        if _PBC.TICK_COUNT % PBC_RESET_EVERY == 0 then _PBC.PROCESSED_PAWNS = {} end
+        if _PBC.TICK_COUNT % (PBC_RESET_EVERY * 20) == 0 then _PBC.BotDetectCache = {} end
+
+        local myTeam = lp.TeamID or 0
+        local allPawns = Game:GetAllPlayerPawns() or {}
+        local cnt = 0
+        local SKC = import("SkeletalMeshComponent")
+        local SMC = import("StaticMeshComponent")
+
+        for _, pawn in pairs(allPawns) do
+            if cnt >= PBC_MAX_PAWNS_PER_TICK then break end
+            local skip = false
+            if not slua.isValid(pawn) or pawn == lp then skip = true
+            elseif pawn.PlayerKey and _PBC.PROCESSED_PAWNS[pawn.PlayerKey] then skip = true end
+
+            if not skip and PBC_IsPawnAlive(pawn) and pawn.TeamID and pawn.TeamID ~= myTeam then
+                local isAI = PBC_DetectIsBot(pawn)
+                local vis = isAI and _PBC.colors.bVis or _PBC.colors.vis
+                local occ = isAI and _PBC.colors.bOcc or _PBC.colors.occ
+                pcall(function()
+                    if slua.isValid(pawn.Mesh) then PBC_ApplyToMesh(pawn.Mesh, vis, occ) end
+                    local av = pawn.CharacterAvatarComp2_BP or pawn:getAvatarComponent2()
+                    if av and av.GetMeshCompBySlot then
+                        for _, s in ipairs(PBC_AVATAR_SLOTS) do
+                            local m = av:GetMeshCompBySlot(s)
+                            if slua.isValid(m) then PBC_ApplyToMesh(m, vis, occ) end
+                        end
+                    end
+                    if SKC then
+                        local sk = pawn:GetComponentsByClass(SKC)
+                        if sk then
+                            for i = 0, sk:Num() - 1 do
+                                local c = sk:Get(i)
+                                if slua.isValid(c) and c ~= pawn.Mesh then PBC_ApplyToMesh(c, vis, occ) end
+                            end
+                        end
+                    end
+                    if SMC then
+                        local st = pawn:GetComponentsByClass(SMC)
+                        if st then
+                            for i = 0, st:Num() - 1 do
+                                local c = st:Get(i)
+                                if slua.isValid(c) then PBC_ApplyToMesh(c, vis, occ) end
+                            end
+                        end
+                    end
+                    local w = pawn:GetCurrentWeapon()
+                    if slua.isValid(w) and slua.isValid(w.Mesh) then PBC_ApplyToMesh(w.Mesh, vis, occ) end
+                end)
+                if pawn.PlayerKey then _PBC.PROCESSED_PAWNS[pawn.PlayerKey] = true end
+                cnt = cnt + 1
+            end
+        end
+    end)
+end
+
+local function PBC_Start()
+    if _G.PBCEnabled ~= true then return false end
+    PBC_SetupConsole()
+    if not _PBC.colors then return false end
+    if _PBC.WH_TIMER and _PBC.TIMER_OWNER then
+        pcall(function()
+            if _PBC.TIMER_OWNER.RemoveGameTimer then
+                _PBC.TIMER_OWNER:RemoveGameTimer(_PBC.WH_TIMER)
+            end
+        end)
+    end
+    _PBC.WH_TIMER = nil
+    _PBC.TIMER_OWNER = nil
+    if _G.Game and _G.Game.AddGameTimer then
+        _PBC.TIMER_OWNER = _G.Game
+        _PBC.WH_TIMER = _G.Game:AddGameTimer(PBC_TICK_INTERVAL, true, PBC_tick)
+        print("[PBC] Wallhack ON (Game timer)")
+        return true
+    end
+    local pc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
+    if slua.isValid(pc) and pc.AddGameTimer then
+        _PBC.TIMER_OWNER = pc
+        _PBC.WH_TIMER = pc:AddGameTimer(PBC_TICK_INTERVAL, true, PBC_tick)
+        print("[PBC] Wallhack ON (PC timer)")
+        return true
+    end
+    return false
+end
+
+local function PBC_Cleanup()
+    if _PBC.WH_TIMER and _PBC.TIMER_OWNER then
+        pcall(function()
+            if _PBC.TIMER_OWNER.RemoveGameTimer then
+                _PBC.TIMER_OWNER:RemoveGameTimer(_PBC.WH_TIMER)
+            end
+        end)
+    end
+    _PBC.WH_TIMER    = nil
+    _PBC.TIMER_OWNER = nil
+    PBC_ClearAllVisuals()
+    PBC_DisableConsole()
+    _PBC.PROCESSED_PAWNS = {}
+    _PBC.BotDetectCache  = {}
+    _PBC.CONSOLE_READY   = false
+    _PBC.TICK_COUNT      = 0
+    print("[PBC] Cleanup done")
+end
+
+_G.PBCEnabled = _G.PBCEnabled or false
+
+function _G.PBCOn()
+    if _G.PBCEnabled == true and _PBC.WH_TIMER then return end
+    _G.PBCEnabled = true
+    pcall(PBC_Start)
+    print("[PBC] ESP ON")
+end
+
+function _G.PBCOff()
+    _G.PBCEnabled = false
+    pcall(PBC_Cleanup)
+    print("[PBC] ESP OFF")
+end
+
+function _G.PBCToggle()
+    if _G.PBCEnabled then _G.PBCOff() else _G.PBCOn() end
+    return _G.PBCEnabled
+end
+
+-- ============================================================
 -- SECTION 5: AIMBOT ENGINE
 -- ============================================================
 _G.XthrlenConfig = _G.XthrlenConfig or {}
@@ -136,7 +435,7 @@ _G.XthrlenState.CustomTextData.AimTouchHipFOV     = 30
 _G.XthrlenState.CustomTextData.AimTouchScopePrio   = 1
 _G.XthrlenState.CustomTextData.AimTouchScopeBone   = 1
 _G.XthrlenState.CustomTextData.AimTouchScopeCond   = 1
-_G.XthrlenState.CustomTextData.AimTouchScopeSpeed  = 200
+_G.XthrlenState.CustomTextData.AimTouchScopeSpeed  = 120
 _G.XthrlenState.CustomTextData.AimTouchScopeDist   = 120
 _G.XthrlenState.CustomTextData.AimTouchScopeFOV    = 30
 _G.XthrlenState.CustomTextData.AimTouchScopePred   = 0
@@ -321,7 +620,7 @@ local function AIM_Tick()
                 if cond == 1 and not isFiring then return end
                 prioMode = _G.XthrlenState.CustomTextData.AimTouchScopePrio or 1
                 boneIdx = 1
-                speedVal = _G.XthrlenState.CustomTextData.AimTouchScopeSpeed or 200
+                speedVal = _G.XthrlenState.CustomTextData.AimTouchScopeSpeed or 100
                 fovVal = _G.XthrlenState.CustomTextData.AimTouchScopeFOV or 30
                 maxDistMeters = _G.XthrlenState.CustomTextData.AimTouchScopeDist or 100
                 useVisCheck = _G.XthrlenConfig.AimTouchScopeVisCheck
@@ -668,7 +967,7 @@ local function g_masterahsanyt_ApplyiPadView()
     if player.bIsWeaponAiming then return end
 
     if _G.LexusConfig.IpadView then
-        local targetFOV = _G.LexusState.CustomTextData.IpadViewFOV or 108
+        local targetFOV = _G.LexusState.CustomTextData.IpadViewFOV or 120
         if cam.FieldOfView ~= targetFOV then
             cam.FieldOfView = targetFOV
         end
@@ -682,7 +981,7 @@ end
 local function _iPadViewTick()
     if _G.LexusConfig.IpadView ~= true then return end
     pcall(g_masterahsanyt_ApplyiPadView)
-
+    
     if _G.Game and _G.Game.AddGameTimer then
         _iPadViewTimerOwner = _G.Game
         _iPadViewTimer = _G.Game:AddGameTimer(0.5, false, _iPadViewTick)
@@ -724,222 +1023,6 @@ function _G.BotmasterIPadViewToggle()
     return _G.LexusConfig.IpadView
 end
 
--- ============================================================
--- SECTION 5.6: SILENT AIM ENGINE (BOTMASTER)
--- ============================================================
-_G.BotmasterSilentAimConfig = _G.BotmasterSilentAimConfig or {
-    Enabled       = false,
-    Rate          = 0.05,
-    BoneName      = "head",
-    HeadOffsetZ   = 75,
-    MaxDist       = 30000,
-    IgnoreKnocked = true,
-    IgnoreBots    = false,
-    ApplyProps    = true,
-}
-_G.BotmasterSilentAimState = _G.BotmasterSilentAimState or {
-    Timer          = nil,
-    TimerOwner     = nil,
-    LastShot       = 0,
-    ModifiedWeapon = nil,
-    OriginalProps  = nil,
-}
-local _SA  = _G.BotmasterSilentAimState
-local _SAC = _G.BotmasterSilentAimConfig
-
-local function SA_MakeVec(x, y, z)
-    pcall(function()
-        if FVector and FVector.New then
-            local ok, v = pcall(FVector.New, x, y, z)
-            if ok and v then return v end
-        end
-    end)
-    pcall(function()
-        if FVector then
-            local ok, v = pcall(FVector, x, y, z)
-            if ok and v then return v end
-        end
-    end)
-    return { X = x, Y = y, Z = z }
-end
-
-local function SA_GetNearestEnemy(playerPawn)
-    if not playerPawn then return nil end
-    local ok, enemies = pcall(function() return _G.GetEnemyTargetsFromActors(_SAC.MaxDist) end)
-    if not ok or not enemies or #enemies == 0 then return nil end
-    local best, bestDist = nil, math.huge
-    for _, e in ipairs(enemies) do
-        if slua.isValid(e) and e:IsAlive() then
-            local skip = false
-            if _SAC.IgnoreKnocked and e.HealthStatus == 1 then skip = true end
-            if not skip and _SAC.IgnoreBots then
-                if e.bIsAI == true or e.IsAI == true then skip = true end
-                local ps = e.PlayerState
-                if not skip and slua.isValid(ps) and (ps.bIsABot or ps.bIsBot) then skip = true end
-            end
-            if not skip then
-                local d = playerPawn:GetDistanceTo(e)
-                if d and d < bestDist then best, bestDist = e, d end
-            end
-        end
-    end
-    return best
-end
-
-local function SA_GetBoneLocation(target, boneName, headOffsetZ)
-    if not slua.isValid(target) then return nil end
-    local pos = nil
-    pcall(function()
-        if type(target.GetBonePos) == "function" then
-            pos = target:GetBonePos(boneName, { X = 0, Y = 0, Z = 0 })
-        end
-    end)
-    if not pos or (pos.X == 0 and pos.Y == 0 and pos.Z == 0) then
-        pcall(function()
-            if type(target.GetSocketLocation) == "function" then
-                pos = target:GetSocketLocation(boneName)
-            end
-        end)
-    end
-    if not pos or (pos.X == 0 and pos.Y == 0 and pos.Z == 0) then
-        pcall(function()
-            if type(target.K2_GetActorLocation) == "function" then
-                local loc = target:K2_GetActorLocation()
-                if loc then
-                    pos = { X = loc.X, Y = loc.Y, Z = loc.Z + (headOffsetZ or 75) }
-                end
-            end
-        end)
-    end
-    return pos
-end
-
-local function SA_ApplyWeaponProps(shootWeapon)
-    if not _SAC.ApplyProps then return end
-    if _SA.ModifiedWeapon == shootWeapon then return end
-    if not _SA.OriginalProps then
-        _SA.OriginalProps = {
-            BulletFireSpeed          = shootWeapon.BulletFireSpeed,
-            TraceDistance            = shootWeapon.TraceDistance,
-            GameDeviationFactor      = shootWeapon.GameDeviationFactor,
-            AccessoriesHRecoilFactor = shootWeapon.AccessoriesHRecoilFactor,
-            AccessoriesVRecoilFactor = shootWeapon.AccessoriesVRecoilFactor,
-            RecoilKickADS            = shootWeapon.RecoilKickADS,
-            ShootSightReturnSpeed    = shootWeapon.ShootSightReturnSpeed,
-        }
-    end
-    pcall(function()
-        shootWeapon.BulletFireSpeed          = 50000
-        shootWeapon.TraceDistance            = 50000
-        shootWeapon.GameDeviationFactor      = 0
-        shootWeapon.AccessoriesHRecoilFactor = 0
-        shootWeapon.AccessoriesVRecoilFactor = 0
-        shootWeapon.RecoilKickADS            = 0
-        shootWeapon.ShootSightReturnSpeed    = 30
-    end)
-    _SA.ModifiedWeapon = shootWeapon
-end
-
-local function SA_RestoreWeaponProps()
-    if _SA.ModifiedWeapon and _SA.OriginalProps then
-        pcall(function()
-            for k, v in pairs(_SA.OriginalProps) do
-                if v ~= nil then _SA.ModifiedWeapon[k] = v end
-            end
-        end)
-    end
-    _SA.ModifiedWeapon = nil
-    _SA.OriginalProps  = nil
-end
-
-local function SA_Fire(playerPawn)
-    if not slua.isValid(playerPawn) then return end
-    local currentWeapon = nil
-    pcall(function()
-        if type(playerPawn.GetCurrentWeapon) == "function" then
-            currentWeapon = playerPawn:GetCurrentWeapon()
-        end
-        if not slua.isValid(currentWeapon) and playerPawn.WeaponManagerComponent then
-            currentWeapon = playerPawn.WeaponManagerComponent.CurrentWeaponReplicated
-        end
-    end)
-    if not slua.isValid(currentWeapon) then return end
-
-    local shootWeapon = currentWeapon.ShootWeaponEntity or currentWeapon.ShootWeaponEntity_GEN_VARIABLE
-    if not slua.isValid(shootWeapon) and currentWeapon.ShootWeaponComponent then
-        shootWeapon = currentWeapon.ShootWeaponComponent
-    end
-    if not slua.isValid(shootWeapon) then return end
-
-    SA_ApplyWeaponProps(shootWeapon)
-
-    local target = SA_GetNearestEnemy(playerPawn)
-    if not slua.isValid(target) then return end
-
-    local headLoc = SA_GetBoneLocation(target, _SAC.BoneName, _SAC.HeadOffsetZ)
-    if not headLoc then return end
-
-    if shootWeapon.OnFireHitServer then
-        local normal = SA_MakeVec(0, 0, 0)
-        pcall(function()
-            shootWeapon:OnFireHitServer(target, headLoc, normal, _SAC.BoneName)
-        end)
-    end
-end
-
-local function SA_Tick()
-    if not _SAC.Enabled then return end
-    pcall(function()
-        local player = GameplayData.GetPlayerCharacter()
-        if not slua.isValid(player) then return end
-        if not player.bIsWeaponFiring then return end
-        local now = os.clock()
-        if (now - _SA.LastShot) < _SAC.Rate then return end
-        SA_Fire(player)
-        _SA.LastShot = now
-    end)
-end
-
-function _G.SilentAimOn()
-    if _SAC.Enabled and _SA.Timer then return end
-    _SAC.Enabled = true
-    _SA.LastShot = 0
-    local started = false
-    if _G.Game and _G.Game.AddGameTimer then
-        _SA.TimerOwner = _G.Game
-        _SA.Timer = _G.Game:AddGameTimer(0.016, true, SA_Tick)
-        started = true
-    else
-        local pc = slua_GameFrontendHUD and slua_GameFrontendHUD:GetPlayerController()
-        if slua.isValid(pc) and pc.AddGameTimer then
-            _SA.TimerOwner = pc
-            _SA.Timer = pc:AddGameTimer(0.016, true, SA_Tick)
-            started = true
-        end
-    end
-    if started then print("[SILENT AIM] ON") else print("[SILENT AIM] Timer failed") end
-end
-
-function _G.SilentAimOff()
-    _SAC.Enabled = false
-    if _SA.Timer and _SA.TimerOwner then
-        pcall(function()
-            if _SA.TimerOwner.RemoveGameTimer then
-                _SA.TimerOwner:RemoveGameTimer(_SA.Timer)
-            end
-        end)
-    end
-    _SA.Timer      = nil
-    _SA.TimerOwner = nil
-    _SA.LastShot   = 0
-    SA_RestoreWeaponProps()
-    print("[SILENT AIM] OFF — fully reset")
-end
-
-function _G.SilentAimToggle()
-    if _SAC.Enabled then _G.SilentAimOff() else _G.SilentAimOn() end
-    return _SAC.Enabled
-end
 
 -- ============================================================
 -- SECTION 6: BYPASS INTEGRATION (Layers + Gate)
@@ -1488,6 +1571,24 @@ local function g_botmaster_InitMenu()
 
     local Stack = {
         {
+            Key  = "BotmasterESP",
+            UI   = AliasMap.Switcher,
+            Text = "Player ESP (Wallhack)",
+            GetFunc = function()
+                if _G.PBCEnabled == nil then _G.PBCEnabled = false end
+                return _G.PBCEnabled
+            end,
+            SetFunc = function(c, v)
+                local on = (v == true or v == 1)
+                if on then
+                    if _G.PBCOn then pcall(_G.PBCOn) end
+                else
+                    if _G.PBCOff then pcall(_G.PBCOff) end
+                end
+                return true
+            end
+        },
+        {
             Key  = "BotmasterAimbot",
             UI   = AliasMap.Switcher,
             Text = "Hard Aimbot",
@@ -1501,23 +1602,6 @@ local function g_botmaster_InitMenu()
                     if _G.AimbotOn then pcall(_G.AimbotOn) end
                 else
                     if _G.AimbotOff then pcall(_G.AimbotOff) end
-                end
-                return true
-            end
-        },
-        {
-            Key  = "BotmasterSilentAim",
-            UI   = AliasMap.Switcher,
-            Text = "Silent Aim",
-            GetFunc = function()
-                return _G.BotmasterSilentAimConfig.Enabled == true
-            end,
-            SetFunc = function(c, v)
-                local on = (v == true or v == 1)
-                if on then
-                    if _G.SilentAimOn then pcall(_G.SilentAimOn) end
-                else
-                    if _G.SilentAimOff then pcall(_G.SilentAimOff) end
                 end
                 return true
             end
@@ -1671,7 +1755,7 @@ function BRPlayerCharacterBase:ReceiveBeginPlay()
   if Client then
     printf(bWriteLog and "BRPlayerCharacterBase:ReceiveBeginPlay, PlayerKey:%u ", self.PlayerKey)
     GameplayData.AddCharacter(self.Object)
-
+    
     if _G._AUTO_INIT_DONE ~= true then _autoInit() end
   else
     self:AddCommonEventWithConditions(EVENTTYPE_INGAME_NORMAL, EVENTID_GAME_MODE_STATE_CHANGE, {
@@ -1783,8 +1867,8 @@ function BRPlayerCharacterBase:ReceiveEndPlay(EndPlayReason)
   if Client then
     GameplayData.RemoveCharacter(self.Object)
 
-    if type(_G.AimbotOff)            == "function" then pcall(_G.AimbotOff) end
-    if type(_G.SilentAimOff)         == "function" then pcall(_G.SilentAimOff) end
+    if type(_G.PBCOff) == "function" then pcall(_G.PBCOff) end
+    if type(_G.AimbotOff) == "function" then pcall(_G.AimbotOff) end
     if type(_G.BotmasterIPadViewOff) == "function" then pcall(_G.BotmasterIPadViewOff) end
   end
 end
@@ -2181,7 +2265,7 @@ SpecialSuitFeature = "GameLua.Mod.Library.GamePlay.Feature.SpecialSuitFeature"},
 TeleportPawnFeature = "GameLua.Mod.Library.GamePlay.Feature.TeleportPawnFeature"},{
 LifterControl = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.CharacterLifterControlFeature"},{
 FinalKillEffect = "GameLua.Mod.BaseMod.Gameplay.Feature.Player.PlayerCharacterFinalKillEffectFeature"},{
-CampFeature = "GameLua.Mod.BaseMod.BaseMod.GamePlay.Feature.Camp.PlayerCharacterCampFeature"},{
+CampFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.Camp.PlayerCharacterCampFeature"},{
 BuildAircraftVehicleFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.PlayerCharacterBuildVehicleFeature"},{
 UnifiedBuildVehicleFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.UnifiedBuildVehicleFeature"},{
 CommonBornlandTransformFeature = "GameLua.Mod.BaseMod.GamePlay.Feature.HeroPropFeature.CommonBornlandTransformFeature"},{
